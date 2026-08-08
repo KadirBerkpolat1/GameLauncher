@@ -20,7 +20,7 @@ class DownloadManager:
         and adds the game to SLSsteam config.yaml.
         Returns a list of depot dictionaries for DDMod fallback.
         """
-        from src.api.ryuu_api import ryuu_api
+        from src.api.hubcap import hubcap_api
         import zipfile
         import io
         import re
@@ -28,7 +28,7 @@ class DownloadManager:
         from src.utils.vdf_parser import VDFManager
         from src.config.slssteam import SLSsteamConfigManager
 
-        zip_bytes = await ryuu_api.get_app_manifest_zip(app_id)
+        zip_bytes = await hubcap_api.get_app_manifest_zip(app_id)
 
         steam_path = get_steam_path()
         vdf_mgr = None

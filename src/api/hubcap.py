@@ -116,8 +116,7 @@ class HubcapClient:
         if cache_key in self._cache:
             return self._cache[cache_key]
 
-        # Temporary fallback for Ryuu if needed, assuming the new Hubcap REST API uses /status or /library
-        # For now, we'll try to fetch status as details
+        # Fetch status as details
         data = await self.get_status(app_id)
         self._cache[cache_key] = data
         return data

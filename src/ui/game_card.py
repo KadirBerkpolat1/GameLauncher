@@ -163,7 +163,7 @@ class GameCard(QFrame):
             from src.config.settings import SettingsManager
             from src.services.download import DownloadManager
             
-            # 1. Verileri Ryuu API üzerinden çek, manifestleri hazırla ve config'e ekle
+            # 1. API üzerinden çek, manifestleri hazırla ve config'e ekle
             depots = await DownloadManager.prepare_game_data(self.app_id)
             
             download_method = SettingsManager.get("download_method", "steam")

@@ -1,162 +1,89 @@
-# GameLauncher
-
-Linux'ta Steam oyun ve DLC yönetimi icin gelistirilmis masaustu uygulamasi. Oyunlari arayip bul, tek tikla DLC'leri sec, manifest dosyalarini otomatik yapilandir ve dogrudan indir.
-
-![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
-![Qt](https://img.shields.io/badge/PySide6-Qt6-41CD52?logo=qt&logoColor=white)
-![Platform](https://img.shields.io/badge/Platform-Linux-FCC624?logo=linux&logoColor=black)
-
----
-
-## Ozellikler
-
-### Oyun Arama ve Kesif
-- **HubcapManifest** API ile oyun katalogu uzerinden arama
-- **Steam Web API** ile her oyunun tum DLC listesini otomatik cekme
-- Kapak gorselleri ve detaylarla zenginlestirilmis oyun kartlari
-
-### Tek Tikla DLC Yonetimi
-- Bir oyunu sectikten sonra tum DLC'leri gorsel listede goruntuleme
-- Kurmak istedigin DLC'leri tikla-sec, gerisini uygulama halleder
-- SLSsteam `config.yaml` dosyasina AppID ve DLC verilerini otomatik yazma
-
-### Esnek Indirme Motorlari
-- **Steam Protokolu** (`steam://install/`): Standart Steam istemcisi uzerinden indirme
-- **DepotDownloaderMod**: Bagimsiz olarak manifest bazli depot indirme (Steam disinda)
-- Ayarlardan tek tikla motor degistirme
-
-### SLSsteam Entegrasyonu
-- GitHub releases'tan **hazir derlenmmis** `.7z` arsivini indirip otomatik kurulum (`setup.sh`)
-- `config.yaml` yapilandirmasini arayuzden yonetme (Family Share, Cloud Saves, Game Updates vb.)
-- Kurulum durumu tespiti ve tek tikla guncelleme/kaldirma
-- Flatpak ve yerel Steam kurulumlarini otomatik algilama
-
-### Manifest Kaynaklari
-- **Ryuu API**: API anahtariyla manifest + decryption key ZIP dosyasi cekme
-- **Discord Scraper**: Self-bot tokeniyle Discord uzerinden SteamTools botundan manifest toplama
-- Manifest dosyalarini otomatik olarak Steam `depotcache` dizinine yerlestirme
-
-### Arayuz
-- PySide6 (Qt6) ile tamamen karanlik temalı (Dark Theme) modern arayuz
-- Kenar cubugu navigasyonu: Kutuphane, Arama, Indirmeler, Ayarlar
-- Steam'i uygulama icinden yeniden baslatma (VDF degisikliklerinin uygulanmasi icin)
+<div align="center">
+  <h1>🎮 GameLauncher (Linux)</h1>
+  <p><b>A modern, standalone Steam Game and DLC Manager for Linux.</b></p>
+  
+  [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+  [![PySide6](https://img.shields.io/badge/UI-PySide6-green.svg)](https://wiki.qt.io/Qt_for_Python)
+  [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
+</div>
 
 ---
 
-## Sistem Gereksinimleri
+## ✨ Features
 
-| Gereksinim | Aciklama |
-|---|---|
-| **Python 3.11+** | Ana calisma ortami |
-| **p7zip** | SLSsteam kurulumu icin (`7z` komutu) |
-| **Steam** | Yerel veya Flatpak kurulumu |
-| .NET 8.0+ Runtime | *(Opsiyonel)* DepotDownloaderMod kullanimi icin |
+- **HubcapDB REST API Integration:** Fully integrated with the official Hubcap API (`https://hubcapmanifest.com/api/v1`). Browse games, search with AppIDs, and download manifests and Lua files securely.
+- **Built-in Installers:** One-click installation and uninstallation of **SLSsteam (Headcrab)** and **DepotDownloaderMod (DDMod)** directly from the UI.
+- **Library & Downloads Manager:** Queue multiple games, track your download history, and automatically inject games into your Steam library and SLSsteam configuration.
+- **Sleek UI/UX:** A native, hardware-accelerated dark theme built with PySide6, featuring tabbed settings, dynamic badges, and responsive flow layouts.
+- **Direct Steam Integration:** Seamlessly restart Steam directly from the launcher to apply VDF/Lua manifest changes instantly.
 
----
+## 📸 Screenshots
 
-## Kurulum
+*(Add screenshots here showing the Store, Library, and Installer tabs)*
 
-### Hizli Kurulum (Onerilen)
+## 🚀 Installation
+
+### Prerequisites
+Make sure you have Python 3.10+ and `p7zip` installed on your system.
 
 ```bash
-git clone https://github.com/KadirBerkpolat1/GameLauncher.git
-cd GameLauncher
-./install.sh
+# Arch Linux
+sudo pacman -S p7zip git python
+
+# Debian / Ubuntu
+sudo apt install p7zip-full git python3 python3-venv
 ```
 
-Betik su adimlari otomatik uygular:
-1. Python surum kontrolu (3.11+)
-2. Sistem bagimlilik kontrolu (7z)
-3. Dosyalari `~/.local/share/GameLauncher/` dizinine kopyalar
-4. Python sanal ortami olusturur ve bagimliklikari kurar
-5. `gamelauncher` komutunu ve masaustu kisayolunu olusturur
+### Setup
 
-Kurulum tamamlandiktan sonra:
-```bash
-gamelauncher
-```
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/KadirBerkpolat1/GameLauncher.git
+   cd GameLauncher
+   ```
 
-### Manuel Kurulum (Gelistiriciler icin)
+2. **Run the installation script:**
+   This will automatically set up the virtual environment, install PySide6 dependencies, and create desktop shortcuts.
+   ```bash
+   ./install.sh
+   ```
 
-```bash
-git clone https://github.com/KadirBerkpolat1/GameLauncher.git
-cd GameLauncher
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python3 src/main.py
-```
+3. **Launch the application:**
+   You can run it via the newly created desktop shortcut, or manually from the terminal:
+   ```bash
+   source venv/bin/activate
+   python src/main.py
+   ```
 
----
+## ⚙️ Configuration (API Key)
 
-## Kaldirma
+To fetch manifests and browse the store, you must provide a **HubcapDB API Key**:
+1. Get your API key from [HubcapManifest](https://hubcapmanifest.com/api-keys).
+2. Open GameLauncher and go to the **SLSsteam / Installer** tab on the left sidebar.
+3. Paste your key into the **API Key Configuration** section and click **Save**.
+
+## 🏗️ Architecture
+
+- **`src/ui/`**: PySide6 widgets (Search, Library, Downloads, Game Cards, Settings).
+- **`src/api/`**: The `HubcapClient` managing HTTP requests to the HubcapDB endpoints with proper rate-limit and auth handling.
+- **`src/services/`**: 
+  - `installer.py`: Asynchronous background installation of `.so` files and DLLs.
+  - `download.py`: Extracts ZIP manifests, configures VDFs, and talks to DDMod.
+- **`src/config/`**: Manages `settings.json` and SLSsteam's `config.yaml`.
+
+## 🗑️ Uninstallation
+
+If you wish to remove GameLauncher, its virtual environments, and downloaded metadata:
 
 ```bash
 ./uninstall.sh
 ```
+*(Note: This does not delete the games you downloaded into your Steam library).*
 
-Betik uygulamayi, komut satirini ve masaustu kisayolunu temizler. Ayar dosyalarini silip silmemeyi sorar.
-
-> **Not:** SLSsteam ayri bir yazilimdir ve bu betik tarafindan kaldirilmaz.
-> SLSsteam'i kaldirmak icin: `~/.local/share/SLSsteam/setup.sh uninstall`
-
----
-
-## Ilk Calistirmada Yapilacaklar
-
-1. Uygulamayi acin ve sol menueden **Settings** tiklayin
-2. **Steam Path** alaninin dogru oldugunu kontrol edin (otomatik tespit edilir)
-3. Manifest kaynagi olarak **Ryuu API Key** girin
-4. *(Opsiyonel)* SLSsteam bolumunden **Install / Update** butonuyla SLSsteam'i kurun
-5. *(Opsiyonel)* DDMod bolumunden **Install / Update DDMod** butonuyla DepotDownloader'i kurun
+## 🤝 Contributing
+Pull requests are welcome! If you find a bug or want to suggest a feature, please open an issue.
 
 ---
-
-## Mimari
-
-```
-src/
-├── api/                  # Dis servis istemcileri
-│   ├── hubcap.py         # HubcapManifest API
-│   ├── ryuu_api.py       # Ryuu manifest API
-│   ├── steam_web.py      # Steam Store API (DLC listesi)
-│   ├── discord_scraper.py # Discord self-bot manifest cekici
-│   └── steam.py          # Steam dosya sistemi islemleri
-├── config/               # Yapilandirma yoneticileri
-│   ├── settings.py       # Uygulama ayarlari (JSON)
-│   └── slssteam.py       # SLSsteam config.yaml yonetimi
-├── services/             # Is mantigi
-│   ├── installer.py      # SLSsteam & DDMod kurulum motoru
-│   └── download.py       # Indirme yoneticisi (Steam / DDMod)
-├── ui/                   # PySide6 arayuz bilesenleri
-│   ├── main_window.py    # Ana pencere ve navigasyon
-│   ├── search_widget.py  # Oyun arama ekrani
-│   ├── library_widget.py # Kutuphane gorunumu
-│   ├── downloads_widget.py # Indirme kuyrugu
-│   ├── settings_dialog.py  # Ayarlar penceresi
-│   ├── game_card.py      # Oyun karti bileseni
-│   ├── dlc_dialog.py     # DLC secim penceresi
-│   └── styles.py         # Karanlik tema CSS
-├── utils/                # Yardimci araclar
-│   ├── paths.py          # Steam/SLSsteam yol tespiti
-│   └── vdf_manager.py    # Valve VDF dosya islemleri
-├── app.py                # Qt + asyncio entegrasyonu
-└── main.py               # Giris noktasi
-```
-
----
-
-## Bagimlilklar
-
-```
-PySide6>=6.5.0    # Qt6 arayuz cercevesi
-httpx>=0.24.0     # Asenkron HTTP istemcisi
-PyYAML>=6.0.1     # SLSsteam config.yaml islemleri
-vdf>=3.4          # Valve Data Format okuma/yazma
-```
-
----
-
-## Lisans
-
-Bu proje su an ozel (private) olarak gelistirilmektedir.
+<div align="center">
+  <i>Built for the Linux gaming community.</i>
+</div>
