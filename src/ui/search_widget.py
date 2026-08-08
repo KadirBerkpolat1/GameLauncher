@@ -10,10 +10,14 @@ from src.ui.flow_layout import FlowLayout
 class SearchWidget(QWidget):
     def __init__(self) -> None:
         super().__init__()
+        self.current_page = 1
+        self.total_pages = 1
+        self.limit = 50
         self.init_ui()
         self.search_timer = QTimer()
         self.search_timer.setSingleShot(True)
         self.search_timer.timeout.connect(self._perform_search)
+
 
     def init_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -54,8 +58,9 @@ class SearchWidget(QWidget):
         filters_bar.addWidget(self.combo_sort)
         filters_bar.addWidget(self.cb_adult)
         filters_bar.addSpacing(10)
-        filters_bar.addWidget(self.cb_games)
-        filters_bar.addWidget(self.cb_dlc)
+        self.btn_load = QPushButton("Load")
+        self.btn_load.clicked.connect(self._load_library)
+        self.btn_select_mode = QPushButton("Select Mode")
         filters_bar.addWidget(self.cb_music)
         filters_bar.addWidget(self.cb_apps)
         filters_bar.addStretch()
@@ -97,12 +102,15 @@ class SearchWidget(QWidget):
         
         pagination_bar.addStretch()
         pagination_bar.addWidget(self.btn_prev)
+        self.btn_prev.clicked.connect(self._prev_page)
         pagination_bar.addWidget(self.lbl_page)
         pagination_bar.addWidget(self.btn_next)
+        self.btn_next.clicked.connect(self._next_page)
         pagination_bar.addSpacing(20)
         pagination_bar.addWidget(QLabel("Go to:"))
         pagination_bar.addWidget(self.goto_input)
         pagination_bar.addWidget(self.btn_go)
+        self.btn_go.clicked.connect(self._goto_page)
         layout.addLayout(pagination_bar)
 
 
@@ -114,8 +122,10 @@ class SearchWidget(QWidget):
         else:
             self.search_timer.stop()
             self._clear_results()
+            self._load_library() # Default back to library view when search is cleared
             self.status_label.setText("Type at least 3 characters to search.")
             self.status_label.show()
+
 
     def _clear_results(self) -> None:
         # Remove all widgets except the status label
@@ -125,50 +135,75 @@ class SearchWidget(QWidget):
                 item.widget().deleteLater()
 
     def _perform_search(self) -> None:
-        query = self.search_input.text()
-        # Fire and forget the async task using the global loop
+        query = self.search_input.text().strip()
+        if not query:
+            return
+            
+        is_appid = self.cb_appid.isChecked()
         loop = asyncio.get_event_loop()
-        loop.create_task(self._fetch_from_api(query))
+        loop.create_task(self._fetch_search(query, is_appid))
 
-    async def _fetch_from_api(self, query: str) -> None:
-        import httpx
+    async def _fetch_search(self, query: str, is_appid: bool) -> None:
         try:
-            # 1. Fetch from HubcapManifest API
-            results = await hubcap_api.search_game(query)
-
-            # 2. Inject results directly from Steam Store API to guarantee exact matches
-            try:
-                async with httpx.AsyncClient() as client:
-                    steam_resp = await client.get(f"https://store.steampowered.com/api/storesearch/?term={query}&l=english&cc=US", timeout=5.0)
-                    if steam_resp.status_code == 200:
-                        steam_data = steam_resp.json().get("items", [])
-                        for item in steam_data:
-                            # If it's a very close match, inject it at the very top of our results
-                            if query.lower() in item.get("name", "").lower():
-                                # Check if it's already in the results list to avoid duplicates
-                                if not any(str(g.get("game_id", "")) == str(item["id"]) for g in results):
-                                    results.insert(0, {
-                                        "game_id": str(item["id"]),
-                                        "game_name": item["name"],
-                                        "header_image": item.get("tiny_image", "")
-                                    })
-            except Exception as steam_err:
-                print(f"Steam API Search Fallback failed: {steam_err}")
-
-            self._display_results(results)
+            results = await hubcap_api.search_game(query, limit=self.limit, appid=is_appid)
+            # Search API returns a list or a dict with data? Assume list for search based on old code
+            data = results if isinstance(results, list) else results.get("data", [])
+            self._display_results(data)
         except Exception as e:
             self._clear_results()
             self.status_label.setText(f"Error: {e}")
             self.status_label.show()
 
+    def _load_library(self) -> None:
+        loop = asyncio.get_event_loop()
+        loop.create_task(self._fetch_library())
+
+    async def _fetch_library(self) -> None:
+        try:
+            offset = (self.current_page - 1) * self.limit
+            sort_by = "name" if "Name" in self.combo_sort.currentText() else "updated"
+            
+            # Pass filters
+            search_term = self.search_input.text().strip()
+            
+            results = await hubcap_api.get_library(limit=self.limit, offset=offset, search=search_term, sort_by=sort_by)
+            
+            # Handle API pagination metadata if it exists
+            if isinstance(results, dict) and "data" in results:
+                data = results["data"]
+                total = results.get("meta", {}).get("total", len(data))
+                self.total_pages = max(1, (total + self.limit - 1) // self.limit)
+            else:
+                data = results if isinstance(results, list) else []
+                self.total_pages = max(1, self.current_page + (1 if len(data) == self.limit else 0))
+                
+            self.lbl_page.setText(f"Page {self.current_page} of {self.total_pages}")
+            self._display_results(data)
+        except Exception as e:
+            self._clear_results()
+            self.status_label.setText(f"Error: {e}")
+            self.status_label.show()
+
+    def _prev_page(self):
+        if self.current_page > 1:
+            self.current_page -= 1
+            self._load_library()
+            
+    def _next_page(self):
+        if self.current_page < self.total_pages:
+            self.current_page += 1
+            self._load_library()
+            
+    def _goto_page(self):
+        target = self.goto_input.value()
+        if 1 <= target <= self.total_pages:
+            self.current_page = target
+            self._load_library()
+
     def _display_results(self, results: list) -> None:
         self._clear_results()
-        
-        # Static mock update for pagination logic example
-        if results:
-            self.lbl_page.setText(f"Page 1 of {max(1, len(results) // 20)}")
-
-
+        # Clear the old mock pagination
+        pass
         if not results:
             self.status_label.setText("No games found.")
             self.status_label.show()

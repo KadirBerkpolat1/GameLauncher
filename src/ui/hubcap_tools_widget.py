@@ -42,7 +42,7 @@ class HubcapToolsWidget(QWidget):
         form_api.addRow(api_desc)
 
         self.api_key_input = QLineEdit()
-        self.api_key_input.setText(SettingsManager.get("ryuu_api_key", ""))
+        self.api_key_input.setText(SettingsManager.get("hubcap_api_key", ""))
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit)
         self.api_key_input.setPlaceholderText("Enter your API Key")
         
@@ -112,7 +112,7 @@ class HubcapToolsWidget(QWidget):
         main_layout.addWidget(scroll)
 
     def _save_api_key(self):
-        SettingsManager.set("ryuu_api_key", self.api_key_input.text())
+        SettingsManager.set("hubcap_api_key", self.api_key_input.text())
         self.btn_save_api.setText("Saved!")
         from PySide6.QtCore import QTimer
         QTimer.singleShot(2000, lambda: self.btn_save_api.setText("Save API Key"))

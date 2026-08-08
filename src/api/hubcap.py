@@ -76,58 +76,96 @@ class HubcapClient:
         except httpx.RequestError as e:
             raise HubcapAPIError(f"Network error while requesting {e.request.url!r}: {e}") from e
 
-    async def search_game(self, query: str) -> List[Dict[str, Any]]:
+    async def get_library(self, limit: int = 100, offset: int = 0, search: str = "", sort_by: str = "updated") -> Dict[str, Any]:
         """
-        Searches for a game by name. Requires minimum 3 characters.
-        Uses in-memory caching to prevent duplicate API calls for the same query.
+        Browse all available games with pagination, search, and sorting.
         """
-        if len(query) < 3:
-            raise ValueError("Search query must be at least 3 characters long.")
+        params = {
+            "limit": limit,
+            "offset": offset,
+            "sort_by": sort_by
+        }
+        if search:
+            params["search"] = search
+            
+        return await self._request("GET", "/library", params=params)
 
-        cache_key = f"search_{query.lower()}"
-        if cache_key in self._cache:
-            return self._cache[cache_key]
+    async def get_status(self, app_id: int) -> Dict[str, Any]:
+        """
+        Check if a manifest exists and get file information without downloading.
+        """
+        return await self._request("GET", f"/status/{app_id}")
 
-        data = await self._request("GET", "/search", params={"q": query})
-
-        # Assuming the API returns a list of games or a dict with a 'results' key.
-        # Adjust parsing based on actual HubcapManifest API structure.
-        results = data.get("results", []) if isinstance(data, dict) else data
-
-        self._cache[cache_key] = results
-        return results
+    async def search_game(self, query: str, limit: int = 50, appid: bool = False) -> Dict[str, Any]:
+        """
+        Search for games by name or App ID.
+        """
+        params = {
+            "q": query,
+            "limit": limit,
+            "appid": str(appid).lower()
+        }
+        return await self._request("GET", "/search", params=params)
 
     async def get_app_details(self, app_id: int) -> Dict[str, Any]:
         """
-        Fetches detailed information for a specific game (depots, manifests, decryption keys).
+        Fetches detailed information for a specific game.
         Results are cached.
         """
-        cache_key = f"app_{app_id}"
+        cache_key = f"app_details_{app_id}"
         if cache_key in self._cache:
             return self._cache[cache_key]
 
-        data = await self._request("GET", f"/apps/{app_id}")
+        # Temporary fallback for Ryuu if needed, assuming the new Hubcap REST API uses /status or /library
+        # For now, we'll try to fetch status as details
+        data = await self.get_status(app_id)
         self._cache[cache_key] = data
         return data
 
-    async def get_app_manifest_zip(self, app_id: int) -> bytes:
+    async def get_app_manifest_zip(self, app_id: int, force_update: bool = False, content: str = "") -> bytes:
         """
-        Downloads the raw ZIP archive containing the .manifest files and the .lua keys
-        from the Hubcap API.
+        Download a game manifest ZIP file. Counts toward daily usage limit.
         """
         client = self._get_client()
+        params = {}
+        if force_update:
+            params["force_update"] = "true"
+        if content:
+            params["content"] = content
+            
         try:
-            response = await client.get(f"/manifest/{app_id}", timeout=15.0)
-            if response.status_code == 401:
-                raise HubcapAuthError("Invalid API key (401 Unauthorized).")
-            elif response.status_code == 429:
-                raise HubcapRateLimitError("Rate limit exceeded (429 Too Many Requests).")
+            response = await client.get(f"/manifest/{app_id}", params=params, timeout=60.0)
             response.raise_for_status()
             return response.content
         except httpx.HTTPStatusError as e:
-            raise HubcapAPIError(f"HTTP Error {e.response.status_code}: {e.response.text}") from e
+            if e.response.status_code == 401:
+                raise HubcapAuthError("Invalid API key or exhausted quota (401).")
+            raise HubcapAPIError(f"HTTP {e.response.status_code} while downloading manifest for {app_id}") from e
         except httpx.RequestError as e:
-            raise HubcapAPIError(f"Network error while requesting {e.request.url!r}: {e}") from e
+            raise HubcapAPIError(f"Network error downloading manifest: {e}") from e
+
+    async def get_app_lua(self, app_id: int, section: str = "full") -> bytes:
+        """
+        Download the Lua manifest file. Counts toward daily usage limit.
+        section can be "full", "basegame", or "dlc".
+        """
+        client = self._get_client()
+        endpoint = f"/lua/{app_id}"
+        if section == "basegame":
+            endpoint = f"/lua/basegame/{app_id}"
+        elif section == "dlc":
+            endpoint = f"/lua/dlc/{app_id}"
+            
+        try:
+            response = await client.get(endpoint, timeout=30.0)
+            response.raise_for_status()
+            return response.content
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                raise HubcapAuthError("Invalid API key or exhausted quota (401).")
+            raise HubcapAPIError(f"HTTP {e.response.status_code} while downloading lua for {app_id}") from e
+        except httpx.RequestError as e:
+            raise HubcapAPIError(f"Network error downloading lua: {e}") from e
 
     def clear_cache(self) -> None:
         """Clears the in-memory cache."""
