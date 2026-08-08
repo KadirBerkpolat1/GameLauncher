@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gamelauncher"
+version = "0.1.0"
+description = "A Linux desktop app for managing Steam games and DLCs via SLSsteam."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6>=6.5.0",
+    "httpx>=0.24.0",
+    "PyYAML>=6.0.1",
+    "vdf>=3.4"
+]
+
+[project.scripts]
+gamelauncher = "main:main"

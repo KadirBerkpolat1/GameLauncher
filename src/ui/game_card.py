@@ -1,0 +1,285 @@
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
+from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+from src.config.slssteam import SLSsteamConfigManager
+from src.services.download import DownloadManager
+
+class GameCard(QFrame):
+    """
+    A visual card representing a single game in the library or search results.
+    Fetches the cover art natively using QNetworkAccessManager.
+    """
+    def __init__(self, app_id: int, title: str, image_url: str = "", mode: str = "search") -> None:
+        super().__init__()
+        self.app_id = app_id
+        self.title = title
+        self.image_url = image_url
+        self.mode = mode
+        self.setObjectName("GameCard")
+        # Increased height slightly to give buttons more breathing room
+        self.setFixedSize(200, 320)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 10)
+        layout.setSpacing(5)
+
+        # Image Label
+        self.image_label = QLabel()
+        self.image_label.setObjectName("GameCardImage")
+        self.image_label.setStyleSheet("background-color: #1B2027; border-top-left-radius: 12px; border-top-right-radius: 12px;")
+        self.image_label.setFixedSize(200, 240)
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_label.setText("Loading...")
+        layout.addWidget(self.image_label)
+
+        # Title
+        self.title_label = QLabel(self.title)
+        self.title_label.setWordWrap(True)
+        self.title_label.setStyleSheet("font-weight: bold; padding: 0 10px; color: #FFFFFF;")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.title_label)
+
+        # Action Buttons (Contextual based on mode)
+        btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(10, 0, 10, 0)
+
+        if self.mode == "search":
+            self.btn_download = QPushButton("Queue")
+            self.btn_download.setProperty("cssClass", "PrimaryAction")
+            self.btn_download.clicked.connect(self._queue_download)
+
+            self.btn_dlc = QPushButton("DLC")
+            self.btn_dlc.setProperty("cssClass", "SecondaryAction")
+            self.btn_dlc.clicked.connect(self._show_dlc_dialog)
+
+            btn_layout.addWidget(self.btn_dlc)
+            btn_layout.addWidget(self.btn_download)
+        elif self.mode == "queued":
+            self.btn_commit = QPushButton("Download")
+            self.btn_commit.setProperty("cssClass", "PrimaryAction")
+            self.btn_commit.clicked.connect(self._commit_and_download)
+
+            self.btn_remove = QPushButton("Remove")
+            self.btn_remove.setProperty("cssClass", "SecondaryAction")
+            self.btn_remove.clicked.connect(self._remove_from_queue)
+
+            btn_layout.addWidget(self.btn_remove)
+            btn_layout.addWidget(self.btn_commit)
+        elif self.mode == "library":
+            self.btn_remove_lib = QPushButton("Kaldır")
+            self.btn_remove_lib.setProperty("cssClass", "SecondaryAction")
+            self.btn_remove_lib.setStyleSheet("background-color: #DA3633; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600;")
+            self.btn_remove_lib.clicked.connect(self._remove_from_library)
+
+            self.btn_play = QPushButton("İndir")
+            self.btn_play.setProperty("cssClass", "PrimaryAction")
+            self.btn_play.clicked.connect(self._download_game)
+
+            btn_layout.addWidget(self.btn_remove_lib)
+            btn_layout.addWidget(self.btn_play)
+
+        layout.addLayout(btn_layout)
+
+        # Network Manager for Image Downloading
+        self.network_manager = QNetworkAccessManager(self)
+        self.network_manager.finished.connect(self._on_image_loaded)
+
+        if self.app_id and self.app_id != 0:
+            self._fetch_image()
+        else:
+            self.image_label.setText("No Image")
+
+    def _fetch_image(self, index: int = 0) -> None:
+        self.image_urls = [
+            f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/library_600x900.jpg",
+            f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/header.jpg",
+            f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/capsule_616x353.jpg",
+        ]
+        if self.image_url:
+            self.image_urls.append(self.image_url)
+
+        if index < len(self.image_urls):
+            self.current_url_index = index
+            request = QNetworkRequest(QUrl(self.image_urls[index]))
+            self.network_manager.get(request)
+        else:
+            self.image_label.setText("No Image Available")
+
+    def _on_image_loaded(self, reply: QNetworkReply) -> None:
+        status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
+        if reply.error() == QNetworkReply.NetworkError.NoError and status_code == 200:
+            image_data = reply.readAll()
+            image = QImage()
+            image.loadFromData(image_data)
+
+            pixmap = QPixmap(image).scaled(
+                200, 240,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self.image_label.setPixmap(pixmap)
+            self.image_label.setText("")
+        else:
+            # Fallback to the next URL in the queue
+            self._fetch_image(getattr(self, 'current_url_index', 0) + 1)
+
+        reply.deleteLater()
+
+    def _remove_from_queue(self) -> None:
+        try:
+            from src.config.settings import SettingsManager
+            queue = SettingsManager.get("download_queue", [])
+            queue = [g for g in queue if g.get("app_id") != self.app_id]
+            SettingsManager.set("download_queue", queue)
+            self.hide() # visually remove the card
+        except Exception as e:
+            print(f"Error removing from queue: {e}")
+
+    def _commit_and_download(self) -> None:
+        """Commits the game to the library (SLSsteam config), writes VDF keys, and triggers Steam."""
+        self.btn_commit.setText("Processing...")
+        self.btn_commit.setEnabled(False)
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.create_task(self._async_commit())
+
+    async def _async_commit(self) -> None:
+        try:
+            from src.config.settings import SettingsManager
+            from src.services.download import DownloadManager
+            
+            # 1. Verileri Ryuu API üzerinden çek, manifestleri hazırla ve config'e ekle
+            depots = await DownloadManager.prepare_game_data(self.app_id)
+            
+            download_method = SettingsManager.get("download_method", "steam")
+            
+            if download_method == "ddmod":
+                self.btn_commit.setText("Downloading...")
+                for depot in depots:
+                    depot_id = depot.get("depot_id")
+                    man_id = depot.get("manifest_id")
+                    if depot_id and man_id:
+                        async for progress in DownloadManager.install_via_ddmod(self.app_id, depot_id, man_id):
+                            print(f"[{self.app_id}] DDMod: {progress}")
+                
+                self.btn_commit.setText("İndi")
+            else:
+                self.btn_commit.setText("Steam'i Yeniden Başlatın")
+                
+            # Visually and logically remove from queue (or keep it if you want to show 'İndi')
+            # Biz arka planda işlem bittikten 2 saniye sonra listeden kaldıralım.
+            import asyncio
+            await asyncio.sleep(2)
+            self._remove_from_queue()
+        except Exception as e:
+            self.btn_commit.setText("Error")
+            self.btn_commit.setEnabled(True)
+            print(f"Error committing download: {e}")
+
+    def _queue_download(self) -> None:
+        try:
+            from src.config.settings import SettingsManager
+            queue = SettingsManager.get("download_queue", [])
+            if not any(g.get("app_id") == self.app_id for g in queue):
+                queue.append({
+                    "app_id": self.app_id,
+                    "title": self.title,
+                    "image_url": self.image_url
+                })
+                SettingsManager.set("download_queue", queue)
+
+            self.btn_download.setText("Queued")
+            self.btn_download.setEnabled(False)
+            self.btn_download.setStyleSheet("background-color: #238636; color: #FFFFFF; border: none;")
+        except Exception as e:
+            self.btn_download.setText("Error")
+            print(f"Error queueing download: {e}")
+
+    def _show_dlc_dialog(self) -> None:
+        """Opens the DLC selection dialog after fetching data from Steam."""
+        self.btn_dlc.setText("Yükleniyor...")
+        self.btn_dlc.setEnabled(False)
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.create_task(self._async_show_dlc_dialog())
+        
+    async def _async_show_dlc_dialog(self) -> None:
+        try:
+            from src.api.steam_web import SteamWebAPI
+            dlcs = await SteamWebAPI().get_dlcs(self.app_id)
+            if not dlcs:
+                self.btn_dlc.setText("DLC Yok")
+                return
+            
+            from src.ui.dlc_dialog import DLCDialog
+            dialog = DLCDialog(self.window(), dlcs)
+            if dialog.exec():
+                selected = dialog.get_selected_dlcs()
+                if selected:
+                    from src.config.slssteam import SLSsteamConfigManager
+                    manager = SLSsteamConfigManager()
+                    for dlc in selected:
+                        manager.set_dlc_data(self.app_id, dlc["app_id"], dlc["name"])
+                    self.btn_dlc.setText(f"{len(selected)} DLC Seçildi")
+                else:
+                    self.btn_dlc.setText("DLC")
+            else:
+                self.btn_dlc.setText("DLC")
+        except Exception as e:
+            print(f"DLC çekme hatası: {e}")
+            self.btn_dlc.setText("Hata")
+        finally:
+            self.btn_dlc.setEnabled(True)
+
+    def _remove_from_library(self) -> None:
+        """Removes the game from the SLSsteam configuration and visually hides the card."""
+        try:
+            from src.config.slssteam import SLSsteamConfigManager
+            manager = SLSsteamConfigManager()
+            # Tip uyuşmazlıklarına ve YAML parser'ın boş değerleri None yapmasına karşı tam güvenlik
+            manager.config_data["AdditionalApps"] = [x for x in (manager.config_data.get("AdditionalApps") or []) if str(x) != str(self.app_id)]
+            manager.config_data["AppIds"] = [x for x in (manager.config_data.get("AppIds") or []) if str(x) != str(self.app_id)]
+            manager.save()
+            self.deleteLater() # Sadece gizlemek yerine widget'ı tamamen bellekten ve ekrandan sil
+        except Exception as e:
+            print(f"Error removing from library: {e}")
+
+    def _download_game(self) -> None:
+        """Triggers the download directly from the library using the selected engine."""
+        self.btn_play.setText("Processing...")
+        self.btn_play.setEnabled(False)
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.create_task(self._async_download_game())
+
+    async def _async_download_game(self) -> None:
+        try:
+            from src.config.settings import SettingsManager
+            from src.services.download import DownloadManager
+
+            download_method = SettingsManager.get("download_method", "steam")
+
+            # Extract manifests, inject keys, and update config
+            depots = await DownloadManager.prepare_game_data(self.app_id)
+
+            if download_method == "ddmod":
+                self.btn_play.setText("Downloading...")
+                for depot in depots:
+                    depot_id = depot.get("depot_id")
+                    man_id = depot.get("manifest_id")
+                    if depot_id and man_id:
+                        async for progress in DownloadManager.install_via_ddmod(self.app_id, depot_id, man_id):
+                            print(f"[{self.app_id}] DDMod: {progress}")
+
+                self.btn_play.setText("Install / Download")
+                self.btn_play.setEnabled(True)
+            else:
+                # Steam metodu seçiliyse otomatik indirme tetikleme. Kullanıcıyı yeniden başlatmaya yönlendir.
+                # DownloadManager.install_via_steam(self.app_id)
+                self.btn_play.setText("Steam'i Yeniden Başlatın")
+                self.btn_play.setEnabled(True)
+        except Exception as e:
+            self.btn_play.setText("Error")
+            self.btn_play.setEnabled(True)
+            print(f"Download Error: {e}")

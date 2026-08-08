@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# OMC / Claude (runtime state)
+.omc/
+.claude/
+
+# AppImage build artifacts
+AppDir/
+*.AppImage
+linuxdeploy-x86_64.AppImage
+
+# Debug / scratch files
+debug_*.py
+scan_*.py
+test_*.py
+
+# Logs
+*.log
