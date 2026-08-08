@@ -1,5 +1,6 @@
 import asyncio
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+                               QScrollArea, QPushButton, QLineEdit, QComboBox)
 from PySide6.QtCore import Qt
 from src.config.slssteam import SLSsteamConfigManager
 from src.ui.game_card import GameCard
@@ -16,10 +17,58 @@ class LibraryWidget(QWidget):
         layout.setContentsMargins(30, 30, 30, 30)
         layout.setSpacing(20)
 
-        # Header
+        # --- Header & Stats ---
+        header_layout = QHBoxLayout()
         header = QLabel("My Library")
         header.setStyleSheet("font-size: 24px; font-weight: bold; color: #FFFFFF;")
-        layout.addWidget(header)
+        self.lbl_stats = QLabel("0 Lua, 0 Steam, 0 GB Size")
+        self.lbl_stats.setStyleSheet("color: #777777; font-size: 14px; margin-left: 20px;")
+        header_layout.addWidget(header)
+        header_layout.addWidget(self.lbl_stats)
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
+
+        # --- Action Toolbar ---
+        action_bar = QHBoxLayout()
+        self.btn_refresh = QPushButton("Refresh")
+        self.btn_refresh.clicked.connect(self.load_library)
+        self.btn_refresh_cache = QPushButton("Refresh Cache")
+        self.btn_toggle_updates = QPushButton("Toggle Updates")
+        self.btn_export_luas = QPushButton("Export Luas")
+        self.btn_restart_steam = QPushButton("Restart Steam")
+        self.btn_restart_steam.setProperty("cssClass", "PrimaryAction")
+        # restart steam is usually connected to main_window, we can leave the signal disconnected or connect it later
+        
+        action_bar.addWidget(self.btn_refresh)
+        action_bar.addWidget(self.btn_refresh_cache)
+        action_bar.addWidget(self.btn_toggle_updates)
+        action_bar.addWidget(self.btn_export_luas)
+        action_bar.addWidget(self.btn_restart_steam)
+        action_bar.addStretch()
+        layout.addLayout(action_bar)
+
+        # --- Filters Toolbar ---
+        filters_bar = QHBoxLayout()
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search in library...")
+        self.search_input.setFixedWidth(250)
+        
+        self.combo_category = QComboBox()
+        self.combo_category.addItems(["All", "Games", "DLC"])
+        
+        self.combo_sort = QComboBox()
+        self.combo_sort.addItems(["Sort: Name", "Sort: Size", "Sort: Recent"])
+
+        self.btn_list_view = QPushButton("List View")
+        self.btn_select_mode = QPushButton("Select Mode")
+
+        filters_bar.addWidget(self.search_input)
+        filters_bar.addWidget(self.combo_category)
+        filters_bar.addWidget(self.combo_sort)
+        filters_bar.addStretch()
+        filters_bar.addWidget(self.btn_select_mode)
+        filters_bar.addWidget(self.btn_list_view)
+        layout.addLayout(filters_bar)
 
         # Grid Area
         self.scroll_area = QScrollArea()
@@ -57,9 +106,13 @@ class LibraryWidget(QWidget):
 
             if not app_ids:
                 self.empty_label.show()
+                self.lbl_stats.setText("0 Lua, 0 Steam, 0 GB Size")
                 return
 
             self.empty_label.hide()
+            
+            # Mock stats calculation based on app count
+            self.lbl_stats.setText(f"{len(app_ids)} Lua, {len(app_ids)} Steam, {len(app_ids)*4.2:.1f} GB Size")
 
             # Fetch game details asynchronously
             loop = asyncio.get_event_loop()

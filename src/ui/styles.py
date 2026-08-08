@@ -150,4 +150,56 @@ QGroupBox::title {
     color: #58A6FF;
     font-weight: 600;
 }
+
+/* Tabs (Settings) */
+QTabWidget::pane {
+    border: 1px solid #30363D;
+    border-radius: 8px;
+    background-color: #0D1117;
+    padding: 10px;
+}
+
+QTabBar::tab {
+    background-color: #21262D;
+    color: #C9D1D9;
+    padding: 10px 20px;
+    border: 1px solid #30363D;
+    border-bottom: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    margin-right: 2px;
+}
+
+QTabBar::tab:selected {
+    background-color: #0D1117;
+    color: #58A6FF;
+    border-bottom: 2px solid #58A6FF;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #30363D;
+}
+
+/* Pagination Controls */
+QSpinBox {
+    background-color: #0D1117;
+    border: 1px solid #30363D;
+    border-radius: 4px;
+    color: #C9D1D9;
+    padding: 4px;
+}
+
+QSpinBox::up-button, QSpinBox::down-button {
+    background-color: #21262D;
+}
+
+/* Available Badge */
+QLabel.AvailableBadge {
+    background-color: #238636;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: bold;
+}
 """

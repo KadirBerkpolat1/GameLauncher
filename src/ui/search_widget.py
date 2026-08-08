@@ -1,5 +1,7 @@
 import asyncio
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QScrollArea, QLabel
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, 
+                               QScrollArea, QLabel, QPushButton, QCheckBox, 
+                               QComboBox, QSpinBox)
 from PySide6.QtCore import Qt, QTimer
 from src.api.hubcap import hubcap_api
 from src.ui.game_card import GameCard
@@ -18,13 +20,51 @@ class SearchWidget(QWidget):
         layout.setContentsMargins(30, 30, 30, 30)
         layout.setSpacing(20)
 
-        # Top Bar (Search Input)
+        # --- Top Bar ---
+        top_bar = QHBoxLayout()
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search for games to add...")
-        self.search_input.setMinimumHeight(45)
+        self.search_input.setMinimumHeight(40)
         self.search_input.textChanged.connect(self._on_text_changed)
-        layout.addWidget(self.search_input)
+        self.cb_appid = QCheckBox("AppID")
+        self.btn_search = QPushButton("Search")
+        self.btn_search.setProperty("cssClass", "PrimaryAction")
+        self.btn_search.clicked.connect(self._perform_search)
+        top_bar.addWidget(self.search_input)
+        top_bar.addWidget(self.cb_appid)
+        top_bar.addWidget(self.btn_search)
+        layout.addLayout(top_bar)
 
+        # --- Filters Bar ---
+        filters_bar = QHBoxLayout()
+        self.combo_sort = QComboBox()
+        self.combo_sort.addItems(["Sort: Newest First", "Sort: Name (A-Z)", "Sort: AppID"])
+        self.cb_adult = QCheckBox("Show adult games")
+        
+        self.cb_games = QCheckBox("Games")
+        self.cb_games.setChecked(True)
+        self.cb_dlc = QCheckBox("DLC")
+        self.cb_music = QCheckBox("Music")
+        self.cb_apps = QCheckBox("Apps")
+
+        self.btn_load = QPushButton("Load")
+        self.btn_select_mode = QPushButton("Select Mode")
+        self.btn_list_view = QPushButton("List View")
+
+        filters_bar.addWidget(self.combo_sort)
+        filters_bar.addWidget(self.cb_adult)
+        filters_bar.addSpacing(10)
+        filters_bar.addWidget(self.cb_games)
+        filters_bar.addWidget(self.cb_dlc)
+        filters_bar.addWidget(self.cb_music)
+        filters_bar.addWidget(self.cb_apps)
+        filters_bar.addStretch()
+        filters_bar.addWidget(self.btn_load)
+        filters_bar.addWidget(self.btn_select_mode)
+        filters_bar.addWidget(self.btn_list_view)
+        layout.addLayout(filters_bar)
+
+        # --- Results Area ---
         # Results Area
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -43,6 +83,28 @@ class SearchWidget(QWidget):
 
         self.scroll_area.setWidget(self.results_container)
         layout.addWidget(self.scroll_area)
+
+        # --- Pagination Bar ---
+        pagination_bar = QHBoxLayout()
+        self.btn_prev = QPushButton("Prev")
+        self.btn_next = QPushButton("Next")
+        self.lbl_page = QLabel("Page 1 of 7717")
+        
+        self.goto_input = QSpinBox()
+        self.goto_input.setMinimum(1)
+        self.goto_input.setMaximum(7717)
+        self.btn_go = QPushButton("Go")
+        
+        pagination_bar.addStretch()
+        pagination_bar.addWidget(self.btn_prev)
+        pagination_bar.addWidget(self.lbl_page)
+        pagination_bar.addWidget(self.btn_next)
+        pagination_bar.addSpacing(20)
+        pagination_bar.addWidget(QLabel("Go to:"))
+        pagination_bar.addWidget(self.goto_input)
+        pagination_bar.addWidget(self.btn_go)
+        layout.addLayout(pagination_bar)
+
 
     def _on_text_changed(self, text: str) -> None:
         if len(text) >= 3:
@@ -101,6 +163,11 @@ class SearchWidget(QWidget):
 
     def _display_results(self, results: list) -> None:
         self._clear_results()
+        
+        # Static mock update for pagination logic example
+        if results:
+            self.lbl_page.setText(f"Page 1 of {max(1, len(results) // 20)}")
+
 
         if not results:
             self.status_label.setText("No games found.")
@@ -124,6 +191,5 @@ class SearchWidget(QWidget):
                 continue
 
             image_url = game.get("header_image", "")
-
-            card = GameCard(app_id, title, image_url)
+            card = GameCard(app_id, title, image_url, mode="store")
             self.results_layout.addWidget(card)

@@ -55,6 +55,21 @@ class GameCard(QFrame):
 
             btn_layout.addWidget(self.btn_dlc)
             btn_layout.addWidget(self.btn_download)
+        elif self.mode == "store":
+            self.badge = QLabel("Available", self.image_label)
+            self.badge.setStyleSheet("background-color: #238636; color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold;")
+            self.badge.move(135, 10)
+
+            self.btn_download = QPushButton("Download")
+            self.btn_download.setProperty("cssClass", "PrimaryAction")
+            self.btn_download.clicked.connect(self._queue_download)
+
+            self.btn_dlc = QPushButton("DLC")
+            self.btn_dlc.setProperty("cssClass", "SecondaryAction")
+            self.btn_dlc.clicked.connect(self._show_dlc_dialog)
+
+            btn_layout.addWidget(self.btn_dlc)
+            btn_layout.addWidget(self.btn_download)
         elif self.mode == "queued":
             self.btn_commit = QPushButton("Download")
             self.btn_commit.setProperty("cssClass", "PrimaryAction")
@@ -67,18 +82,17 @@ class GameCard(QFrame):
             btn_layout.addWidget(self.btn_remove)
             btn_layout.addWidget(self.btn_commit)
         elif self.mode == "library":
-            self.btn_remove_lib = QPushButton("Kaldır")
+            self.btn_remove_lib = QPushButton("Delete Lua")
             self.btn_remove_lib.setProperty("cssClass", "SecondaryAction")
             self.btn_remove_lib.setStyleSheet("background-color: #DA3633; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600;")
             self.btn_remove_lib.clicked.connect(self._remove_from_library)
 
-            self.btn_play = QPushButton("İndir")
-            self.btn_play.setProperty("cssClass", "PrimaryAction")
-            self.btn_play.clicked.connect(self._download_game)
+            self.btn_uninstall = QPushButton("Uninstall")
+            self.btn_uninstall.setProperty("cssClass", "PrimaryAction")
+            self.btn_uninstall.clicked.connect(self._download_game) # Existing download trigger logic can be reused or replaced later
 
             btn_layout.addWidget(self.btn_remove_lib)
-            btn_layout.addWidget(self.btn_play)
-
+            btn_layout.addWidget(self.btn_uninstall)
         layout.addLayout(btn_layout)
 
         # Network Manager for Image Downloading

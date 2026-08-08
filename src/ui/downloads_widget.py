@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QGridLayout, QPushButton
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QGridLayout, QPushButton
 from PySide6.QtCore import Qt
 from src.ui.game_card import GameCard
 from src.ui.flow_layout import FlowLayout
@@ -18,21 +18,42 @@ class DownloadsWidget(QWidget):
         layout.setContentsMargins(30, 30, 30, 30)
         layout.setSpacing(20)
 
-        # Header
-        header = QLabel("Downloads Queue")
+        # --- Header ---
+        header_layout = QVBoxLayout()
+        header = QLabel("Downloads & History")
         header.setStyleSheet("font-size: 24px; font-weight: bold; color: #FFFFFF;")
-        layout.addWidget(header)
+        
+        # Status Indicator
+        self.lbl_status = QLabel("Status: Idle")
+        self.lbl_status.setStyleSheet("color: #58A6FF; font-weight: bold; font-size: 14px;")
+        
+        header_layout.addWidget(header)
+        header_layout.addWidget(self.lbl_status)
+        layout.addLayout(header_layout)
 
-        # Action Bar
+        # --- Action Bar ---
         action_bar = QWidget()
-        action_layout = QVBoxLayout(action_bar)
+        action_layout = QHBoxLayout(action_bar)
         action_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.btn_download_all = QPushButton("Download All")
+        self.btn_download_all = QPushButton("Install All Queued")
         self.btn_download_all.setProperty("cssClass", "PrimaryAction")
         self.btn_download_all.clicked.connect(self._process_queue)
+        
+        self.btn_clear_history = QPushButton("Clear History")
+        self.btn_clear_history.setProperty("cssClass", "SecondaryAction")
+        # self.btn_clear_history.clicked.connect(self._clear_history)
+
         action_layout.addWidget(self.btn_download_all)
+        action_layout.addStretch()
+        action_layout.addWidget(self.btn_clear_history)
         layout.addWidget(action_bar)
+
+        # --- Grid Area (Queue) ---
+        queue_lbl = QLabel("Queued For Installation")
+        queue_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #DDDDDD;")
+        layout.addWidget(queue_lbl)
+
 
         # Grid Area
         self.scroll_area = QScrollArea()
@@ -51,6 +72,29 @@ class DownloadsWidget(QWidget):
 
         self.scroll_area.setWidget(self.grid_container)
         layout.addWidget(self.scroll_area)
+
+        # --- History Area ---
+        history_lbl = QLabel("Download History")
+        history_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #DDDDDD; margin-top: 15px;")
+        layout.addWidget(history_lbl)
+
+        self.history_scroll = QScrollArea()
+        self.history_scroll.setWidgetResizable(True)
+        self.history_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.history_scroll.setStyleSheet("background-color: transparent; border: 1px solid #30363D; border-radius: 8px;")
+        self.history_scroll.setMaximumHeight(150)
+
+        self.history_container = QWidget()
+        self.history_layout = QVBoxLayout(self.history_container)
+        self.history_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        # Mock History Item
+        mock_item = QLabel("✓ Cyberpunk 2077 - Download completed and added to library (Yesterday)")
+        mock_item.setStyleSheet("color: #888888;")
+        self.history_layout.addWidget(mock_item)
+
+        self.history_scroll.setWidget(self.history_container)
+        layout.addWidget(self.history_scroll)
 
     def _clear_grid(self) -> None:
         for i in reversed(range(self.grid_layout.count())):
