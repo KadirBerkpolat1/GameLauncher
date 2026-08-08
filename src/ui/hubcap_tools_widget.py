@@ -18,7 +18,7 @@ class HubcapToolsWidget(QWidget):
         main_layout.setSpacing(20)
 
         # Header
-        header = QLabel("HubcapTools / Installer")
+        header = QLabel("SLSsteam / Installer")
         header.setStyleSheet("font-size: 24px; font-weight: bold; color: #FFFFFF;")
         main_layout.addWidget(header)
 

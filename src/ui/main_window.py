@@ -51,7 +51,7 @@ class MainWindow(QMainWindow):
         self.btn_workshop = self._create_nav_button("Workshop")
         self.btn_cloud = self._create_nav_button("Cloud Saves")
         self.btn_tools = self._create_nav_button("Tools")
-        self.btn_hubcap_tools = self._create_nav_button("HubcapTools")
+        self.btn_hubcap_tools = self._create_nav_button("SLSsteam")
         
         self.btn_settings = self._create_nav_button("Settings")
         self.btn_support = self._create_nav_button("Support")
