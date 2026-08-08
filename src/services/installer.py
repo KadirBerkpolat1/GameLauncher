@@ -68,114 +68,72 @@ class DDModInstaller:
 
 class SLSsteamInstaller:
     """
-    Handles downloading, building, and installing SLSsteam directly from GitHub.
+    Downloads and runs slssteam_install.sh from the GameLauncher GitHub repo.
+    The shell script handles: AceSLS/SLSsteam 7z download → extract → copy .so files.
     """
-    GITHUB_API_URL = "https://api.github.com/repos/AceSLS/SLSsteam/releases/latest"
-    TEMP_DIR = Path("/tmp/slssteam_build")
+    INSTALL_SCRIPT_URL = (
+        "https://raw.githubusercontent.com/KadirBerkpolat1/GameLauncher/main/slssteam_install.sh"
+    )
+    TEMP_SCRIPT = Path("/tmp/slssteam_install.sh")
 
     @classmethod
-    async def get_latest_version_info(cls) -> Dict[str, Any]:
-        """Fetches the latest release info from GitHub."""
+    async def _fetch_script(cls) -> None:
+        """Downloads the install script from GitHub to a temp file."""
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
-                response = await client.get(cls.GITHUB_API_URL, timeout=10.0)
-                response.raise_for_status()
-                data = response.json()
-                return data
+                resp = await client.get(cls.INSTALL_SCRIPT_URL, timeout=15.0)
+                resp.raise_for_status()
+                cls.TEMP_SCRIPT.write_bytes(resp.content)
+                cls.TEMP_SCRIPT.chmod(0o755)
             except Exception as e:
-                raise InstallerError(f"Failed to fetch latest SLSsteam release: {e}")
+                raise InstallerError(f"Kurulum betiği indirilemedi: {e}")
 
     @classmethod
     async def update_slssteam(cls) -> str:
-        # 7z kontrolü
         if not shutil.which("7z") and not shutil.which("7za"):
-            raise InstallerError("Sistemde '7z' bulunamadı. Lütfen önce p7zip (veya 7zip) kurun.")
+            raise InstallerError(
+                "Sistemde '7z' bulunamadı. Lütfen önce p7zip (veya 7zip) kurun.\n"
+                "  Arch:   sudo pacman -S p7zip\n"
+                "  Debian: sudo apt install p7zip-full"
+            )
 
-        info = await cls.get_latest_version_info()
-        
-        download_url = None
-        for asset in info.get("assets", []):
-            if asset["name"] == "SLSsteam-Any.7z":
-                download_url = asset["browser_download_url"]
-                break
-                
-        if not download_url:
-            raise InstallerError("GitHub release içinde 'SLSsteam-Any.7z' bulunamadı.")
+        await cls._fetch_script()
 
-        if cls.TEMP_DIR.exists():
-            shutil.rmtree(cls.TEMP_DIR)
-        cls.TEMP_DIR.mkdir(parents=True, exist_ok=True)
-        
-        archive_path = cls.TEMP_DIR / "SLSsteam-Any.7z"
-        
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            try:
-                resp = await client.get(download_url, timeout=60.0)
-                resp.raise_for_status()
-                with open(archive_path, "wb") as f:
-                    f.write(resp.content)
-            except Exception as e:
-                raise InstallerError(f"Dosya indirilemedi: {e}")
-
-        # 7z ile çıkartma
-        extract_proc = await asyncio.create_subprocess_shell(
-            f"7z x {archive_path} -y -o{cls.TEMP_DIR}",
+        proc = await asyncio.create_subprocess_exec(
+            "bash", str(cls.TEMP_SCRIPT), "install",
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.STDOUT,
         )
-        await extract_proc.communicate()
-        if extract_proc.returncode != 0:
-            raise InstallerError("7z çıkartma işlemi başarısız oldu.")
+        stdout, _ = await proc.communicate()
+        output = stdout.decode(errors="replace")
 
-        # Kurulum Betiğini Çalıştır
-        install_proc = await asyncio.create_subprocess_shell(
-            "bash setup.sh install",
-            cwd=str(cls.TEMP_DIR),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await install_proc.communicate()
-        if install_proc.returncode != 0:
-            raise InstallerError(f"Kurulum başarısız:\n{stderr.decode()}")
-            
-        # Flatpak kurulumunu da dene (varsa kurar, yoksa sessizce geçer)
-        flatpak_proc = await asyncio.create_subprocess_shell(
-            "bash setup.sh flatpak-install",
-            cwd=str(cls.TEMP_DIR),
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL
-        )
-        await flatpak_proc.communicate()
+        if proc.returncode != 0:
+            raise InstallerError(f"SLSsteam kurulumu başarısız:\n{output}")
 
-        # Temizlik
-        shutil.rmtree(cls.TEMP_DIR)
-
-        return info["tag_name"]
+        # Sürüm etiketini çıktıdan al, yoksa "latest" döndür
+        for line in output.splitlines():
+            if "installed successfully" in line:
+                tag = line.split()[1] if len(line.split()) > 1 else "latest"
+                return tag
+        return "latest"
 
     @classmethod
     async def uninstall_slssteam(cls) -> None:
-        home = Path.home()
-        paths_to_remove = [
-            home / ".local/share/SLSsteam",
-            home / ".local/share/applications/steam.desktop",
-            home / ".local/share/applications/steam-native.desktop",
-            home / ".config/fish/SLSsteam.fish",
-            home / ".config/SLSsteam"
-        ]
-        
-        for p in paths_to_remove:
-            if p.is_dir():
-                shutil.rmtree(p, ignore_errors=True)
-            elif p.is_file():
-                p.unlink(missing_ok=True)
-                
+        await cls._fetch_script()
+
+        proc = await asyncio.create_subprocess_exec(
+            "bash", str(cls.TEMP_SCRIPT), "uninstall",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        await proc.communicate()
+
+        # Flatpak override'ı temizle (varsa)
         import subprocess
         subprocess.run(
-            ["flatpak", "override", "--user", "--unset-env=LD_AUDIT", "--unset-env=SHARED_LIBRARY_GUARD", "com.valvesoftware.Steam"],
-            stderr=subprocess.DEVNULL
+            ["flatpak", "override", "--user",
+             "--unset-env=LD_AUDIT", "--unset-env=SHARED_LIBRARY_GUARD",
+             "com.valvesoftware.Steam"],
+            stderr=subprocess.DEVNULL,
+            check=False,
         )
-        
-        flatpak_slsdir = home / ".var/app/com.valvesoftware.Steam/.local/share/SLSsteam"
-        if flatpak_slsdir.exists():
-            shutil.rmtree(flatpak_slsdir, ignore_errors=True)
-
