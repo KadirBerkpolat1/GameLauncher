@@ -27,12 +27,15 @@ class SLSsteamConfigManager:
                         data = {}
                     # Merge: inject missing keys from defaults
                     defaults = self._get_default_structure()
+                    dirty = False
                     for key, val in defaults.items():
                         if key not in data:
                             data[key] = val
+                            dirty = True
                     self.config_data = data
                     # Persist merged config so SLSsteam sees all keys
-                    self.save()
+                    if dirty:
+                        self.save()
             except Exception as e:
                 raise SLSsteamConfigError(f"Failed to load SLSsteam config: {e}")
 
