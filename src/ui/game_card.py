@@ -95,14 +95,13 @@ class GameCard(QFrame):
             self.image_label.setText("No Image")
 
     def _fetch_image(self, index: int = 0) -> None:
-        self.image_urls = []
-        if self.image_url:
-            self.image_urls.append(self.image_url)
-        self.image_urls.extend([
+        self.image_urls = [
             f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/library_600x900.jpg",
             f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/header.jpg",
             f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/capsule_616x353.jpg",
-        ])
+        ]
+        if self.image_url and self.image_url not in self.image_urls:
+            self.image_urls.append(self.image_url)
 
         if index < len(self.image_urls):
             self.current_url_index = index
