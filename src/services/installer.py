@@ -27,9 +27,16 @@ class DDModInstaller:
 
             download_url = None
             for asset in assets:
-                if asset["name"].endswith(".zip"):
+                if "linux-x64.zip" in asset["name"].lower():
                     download_url = asset["browser_download_url"]
                     break
+            
+            # Fallback to any zip if linux-x64 is not found
+            if not download_url:
+                for asset in assets:
+                    if asset["name"].endswith(".zip"):
+                        download_url = asset["browser_download_url"]
+                        break
 
             if not download_url:
                 raise InstallerError("No ZIP asset found in latest DepotDownloader release.")
@@ -44,18 +51,31 @@ class DDModInstaller:
             with zipfile.ZipFile(io.BytesIO(zip_resp.content)) as z:
                 z.extractall(cls.INSTALL_DIR)
 
-            dll_path = cls.INSTALL_DIR / "DepotDownloader.dll"
-            if not dll_path.exists():
-                # Check subdirectories if wrapped in a folder
-                for path in cls.INSTALL_DIR.rglob("DepotDownloader.dll"):
-                    dll_path = path
+            # Look for linux standalone binary first, then fallback to dll
+            bin_path = cls.INSTALL_DIR / "DepotDownloader"
+            if not bin_path.exists():
+                for path in cls.INSTALL_DIR.rglob("DepotDownloader"):
+                    bin_path = path
                     break
 
-            if dll_path.exists():
-                from src.config.settings import SettingsManager
-                SettingsManager.set("depotdownloadermod_path", str(dll_path))
+            if bin_path.exists() and not bin_path.is_dir():
+                # Make it executable
+                bin_path.chmod(0o755)
+                found_path = bin_path
             else:
-                raise InstallerError("DepotDownloader.dll not found after extraction.")
+                # Fallback to .dll
+                dll_path = cls.INSTALL_DIR / "DepotDownloader.dll"
+                if not dll_path.exists():
+                    for path in cls.INSTALL_DIR.rglob("DepotDownloader.dll"):
+                        dll_path = path
+                        break
+                found_path = dll_path if dll_path.exists() else None
+
+            if found_path:
+                from src.config.settings import SettingsManager
+                SettingsManager.set("depotdownloadermod_path", str(found_path))
+            else:
+                raise InstallerError("DepotDownloader executable/dll not found after extraction.")
 
             return tag
 

@@ -156,22 +156,28 @@ class DownloadManager:
         if not ddmod_path.exists() or not ddmod_path.is_file():
             raise DownloadError(f"DepotDownloaderMod not found at {ddmod_path}")
 
-        # Check for .NET runtime
-        dotnet_check = await asyncio.create_subprocess_shell(
-            "dotnet --version",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        await dotnet_check.communicate()
-        if dotnet_check.returncode != 0:
-            raise DownloadError(".NET runtime (dotnet) is not installed or not in PATH.")
+        is_dll = ddmod_path_str.lower().endswith('.dll')
 
-        cmd = [
-            "dotnet", str(ddmod_path),
+        if is_dll:
+            # Check for .NET runtime only if using DLL
+            dotnet_check = await asyncio.create_subprocess_shell(
+                "dotnet --version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await dotnet_check.communicate()
+            if dotnet_check.returncode != 0:
+                raise DownloadError(".NET runtime (dotnet) is not installed or not in PATH.")
+            cmd = ["dotnet", str(ddmod_path)]
+        else:
+            # Standalone binary
+            cmd = [str(ddmod_path)]
+
+        cmd.extend([
             "-app", str(app_id),
             "-depot", str(depot_id),
             "-manifest", str(manifest_id)
-        ]
+        ])
 
         process = await asyncio.create_subprocess_exec(
             *cmd,
