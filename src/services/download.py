@@ -16,6 +16,7 @@ class DownloadManager:
         import io
         import re
         from src.utils.paths import get_steam_path
+        from src.config.slssteam import SLSsteamConfigManager
 
         manifest_map = {}  # depot_id -> manifest_id
 
@@ -34,6 +35,17 @@ class DownloadManager:
                     if steam_path:
                         with open(depotcache_dir / info.filename, "wb") as f:
                             f.write(z.read(info.filename))
+
+        # Persist depot -> manifest_id mapping into SLSsteam config.yaml so the
+        # modded Steam client can find the manifests in depotcache. In the current
+        # Hubcap format the LUA no longer carries setManifestid lines, only the ZIP.
+        if manifest_map:
+            sls_manager = SLSsteamConfigManager()
+            for d_id, m_id in manifest_map.items():
+                if not sls_manager.config_data.get("ManifestIds"):
+                    sls_manager.config_data["ManifestIds"] = {}
+                sls_manager.config_data["ManifestIds"][d_id] = m_id
+            sls_manager.save()
 
         return manifest_map
     @staticmethod
