@@ -83,8 +83,12 @@ class GameCard(QFrame):
             self.btn_download.setProperty("cssClass", "PrimaryAction")
             self.btn_download.clicked.connect(self._request_download)
 
+            self.btn_apply_fix = QPushButton("Apply Fix")
+            self.btn_apply_fix.clicked.connect(self._apply_fix_manually)
+
             btn_layout.addWidget(self.btn_uninstall)
             btn_layout.addWidget(self.btn_download)
+            btn_layout.addWidget(self.btn_apply_fix)
         layout.addLayout(btn_layout)
 
         # Network Manager for Image Downloading
@@ -179,6 +183,21 @@ class GameCard(QFrame):
             
     def _request_download(self) -> None:
         self.download_requested.emit(self.app_id, self.title)
+
+    def _apply_fix_manually(self) -> None:
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        from pathlib import Path
+        
+        folder = QFileDialog.getExistingDirectory(self, "Select Game Folder to Patch", str(Path.home() / ".local/share/Steam/steamapps/common"))
+        if not folder:
+            return
+            
+        from src.utils.onlinefix_patcher import OnlineFixPatcher
+        try:
+            OnlineFixPatcher.apply_patch(self.app_id, folder)
+            QMessageBox.information(self, "Success", "OnlineFix applied successfully!")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to apply OnlineFix:\n{e}")
 
     def _uninstall_game(self) -> None:
         """Asks for confirmation, then fully uninstalls the game (files,
