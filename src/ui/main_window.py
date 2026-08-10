@@ -2,11 +2,11 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
                                  QPushButton, QStackedWidget, QLabel, QSpacerItem, QSizePolicy)
 from PySide6.QtCore import Qt, QSize
 from src.ui.search_widget import SearchWidget
+from src.ui.home_widget import HomeWidget
 from src.ui.library_widget import LibraryWidget
 from src.ui.downloads_widget import DownloadsWidget
 from src.ui.settings_dialog import SettingsDialog
 from src.ui.hubcap_tools_widget import HubcapToolsWidget
-from src.ui.leaderboard_widget import LeaderboardWidget
 
 class MainWindow(QMainWindow):
     """
@@ -46,28 +46,18 @@ class MainWindow(QMainWindow):
         self.btn_installer = self._create_nav_button("Installer")
         self.btn_library = self._create_nav_button("Library")
         self.btn_store = self._create_nav_button("Store")
-        self.btn_leaderboard = self._create_nav_button("Leaderboard")
         self.btn_downloads = self._create_nav_button("Downloads")
-        self.btn_workshop = self._create_nav_button("Workshop")
-        self.btn_cloud = self._create_nav_button("Cloud Saves")
-        self.btn_tools = self._create_nav_button("Tools")
-        self.btn_hubcap_tools = self._create_nav_button("SLSsteam")
-        
         self.btn_settings = self._create_nav_button("Settings")
         self.btn_support = self._create_nav_button("Support")
+        
 
-        self.btn_library.setChecked(True) # Default active
+        self.btn_library.setChecked(True)  # Default active
 
         sidebar_layout.addWidget(self.btn_home)
         sidebar_layout.addWidget(self.btn_installer)
         sidebar_layout.addWidget(self.btn_library)
         sidebar_layout.addWidget(self.btn_store)
-        sidebar_layout.addWidget(self.btn_leaderboard)
         sidebar_layout.addWidget(self.btn_downloads)
-        sidebar_layout.addWidget(self.btn_workshop)
-        sidebar_layout.addWidget(self.btn_cloud)
-        sidebar_layout.addWidget(self.btn_tools)
-        sidebar_layout.addWidget(self.btn_hubcap_tools)
 
         sidebar_layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
@@ -110,28 +100,17 @@ class MainWindow(QMainWindow):
         self.search_view = SearchWidget()
         self.downloads_view = DownloadsWidget()
         self.hubcap_tools_view = HubcapToolsWidget()
-        self.leaderboard_view = LeaderboardWidget()
         
         self.home_view = self._create_placeholder("Home")
-        self.workshop_view = self._create_placeholder("Workshop")
-        self.cloud_view = self._create_placeholder("Cloud Saves")
-        self.tools_view = self._create_placeholder("Tools")
         self.support_view = self._create_placeholder("Support")
 
-        # Add widgets in a specific index order:
-        # 0: Home, 1: Installer (Hubcap), 2: Library, 3: Store, 4: Leaderboard, 
-        # 5: Downloads, 6: Workshop, 7: Cloud, 8: Tools, 9: HubcapTools, 10: Support
+        # Stack index map: 0:Home 1:Installer 2:Library 3:Store 4:Downloads 5:Support
         self.stack.addWidget(self.home_view)          # 0
-        self.stack.addWidget(self.hubcap_tools_view)  # 1 (Installer goes to HubcapTools for now)
+        self.stack.addWidget(self.hubcap_tools_view)  # 1
         self.stack.addWidget(self.library_view)       # 2
         self.stack.addWidget(self.search_view)        # 3
-        self.stack.addWidget(self.leaderboard_view)   # 4
-        self.stack.addWidget(self.downloads_view)     # 5
-        self.stack.addWidget(self.workshop_view)      # 6
-        self.stack.addWidget(self.cloud_view)         # 7
-        self.stack.addWidget(self.tools_view)         # 8
-        self.stack.addWidget(self.hubcap_tools_view)  # 9 (Same view as Installer)
-        self.stack.addWidget(self.support_view)       # 10
+        self.stack.addWidget(self.downloads_view)     # 4
+        self.stack.addWidget(self.support_view)       # 5
 
 
         content_layout.addWidget(self.stack)
@@ -145,25 +124,20 @@ class MainWindow(QMainWindow):
         self.btn_installer.clicked.connect(lambda: self._switch_view(1, self.btn_installer))
         self.btn_library.clicked.connect(lambda: self._switch_view(2, self.btn_library))
         self.btn_store.clicked.connect(lambda: self._switch_view(3, self.btn_store))
-        self.btn_leaderboard.clicked.connect(lambda: self._switch_view(4, self.btn_leaderboard))
-        self.btn_downloads.clicked.connect(lambda: self._switch_view(5, self.btn_downloads))
-        self.btn_workshop.clicked.connect(lambda: self._switch_view(6, self.btn_workshop))
-        self.btn_cloud.clicked.connect(lambda: self._switch_view(7, self.btn_cloud))
-        self.btn_tools.clicked.connect(lambda: self._switch_view(8, self.btn_tools))
-        self.btn_hubcap_tools.clicked.connect(lambda: self._switch_view(9, self.btn_hubcap_tools))
-        self.btn_support.clicked.connect(lambda: self._switch_view(10, self.btn_support))
+        self.btn_downloads.clicked.connect(lambda: self._switch_view(4, self.btn_downloads))
+        self.btn_support.clicked.connect(lambda: self._switch_view(5, self.btn_support))
         
         self.btn_settings.clicked.connect(self._open_settings)
 
     def _create_placeholder(self, text: str) -> QWidget:
+        if text == "Home":
+            return HomeWidget()
         w = QWidget()
-        l = QVBoxLayout(w)
-        lbl = QLabel(f"{text} - Coming Soon")
-        lbl.setStyleSheet("color: #777777; font-size: 24px;")
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        l.addWidget(lbl)
+        layout = QVBoxLayout(w)
+        lbl = QLabel(f"{text} view is under construction.")
+        lbl.setAlignment(Qt.AlignCenter)
+        layout.addWidget(lbl)
         return w
-
 
     def _create_nav_button(self, text: str) -> QPushButton:
         btn = QPushButton(text)
@@ -177,15 +151,15 @@ class MainWindow(QMainWindow):
         # Refresh specific views when switched to
         if index == 2:
             self.library_view.load_library()
-        elif index == 5:
+        elif index == 3:
+            self.search_view._load_library()
+        elif index == 4:
             self.downloads_view.load_queue()
 
-        # Manage active state styling (toggling checks)
+        # Manage active state styling
         all_btns = [
-            self.btn_home, self.btn_installer, self.btn_library, 
-            self.btn_store, self.btn_leaderboard, self.btn_downloads, 
-            self.btn_workshop, self.btn_cloud, self.btn_tools, 
-            self.btn_hubcap_tools, self.btn_support
+            self.btn_home, self.btn_installer, self.btn_library,
+            self.btn_store, self.btn_downloads, self.btn_support
         ]
         for btn in all_btns:
             if btn != active_btn:

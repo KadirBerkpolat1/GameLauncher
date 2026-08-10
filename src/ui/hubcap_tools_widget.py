@@ -1,7 +1,8 @@
 import asyncio
 from pathlib import Path
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QLineEdit, 
-                               QPushButton, QLabel, QHBoxLayout, QGroupBox, QScrollArea)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLineEdit, 
+                               QPushButton, QLabel, QHBoxLayout, QGroupBox, QScrollArea,
+                               QFileDialog, QMessageBox)
 from PySide6.QtCore import Qt
 from src.config.settings import SettingsManager
 from src.services.installer import SLSsteamInstaller, DDModInstaller
@@ -31,31 +32,10 @@ class HubcapToolsWidget(QWidget):
         layout = QVBoxLayout(content)
         layout.setSpacing(20)
 
-        # 1. API Key Group
-        group_api = QGroupBox("API Key Configuration")
-        group_api.setStyleSheet("QGroupBox { border: 1px solid #333; border-radius: 6px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px; color: #58A6FF; font-weight: bold; }")
-        form_api = QFormLayout(group_api)
-        form_api.setSpacing(15)
-
-        api_desc = QLabel('API Key is required to fetch game manifests. <a href="https://hubcapmanifest.com/api-keys" style="color: #66C0F4;">Nasıl API Key Alınır?</a>')
-        api_desc.setOpenExternalLinks(True)
-        form_api.addRow(api_desc)
-
-        self.api_key_input = QLineEdit()
-        self.api_key_input.setText(SettingsManager.get("hubcap_api_key", ""))
-        self.api_key_input.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit)
-        self.api_key_input.setPlaceholderText("Enter your API Key")
-        
-        self.btn_save_api = QPushButton("Save API Key")
-        self.btn_save_api.setProperty("cssClass", "PrimaryAction")
-        self.btn_save_api.clicked.connect(self._save_api_key)
-        
-        api_layout = QHBoxLayout()
-        api_layout.addWidget(self.api_key_input)
-        api_layout.addWidget(self.btn_save_api)
-        form_api.addRow(QLabel("API Key:"), api_layout)
-
-        layout.addWidget(group_api)
+        # API key info label
+        api_info = QLabel("🔑 API key is configured in Settings → General.")
+        api_info.setStyleSheet("color: #8B949E; font-size: 13px;")
+        layout.addWidget(api_info)
 
         # 2. SLSsteam / Headcrab Installer
         group_sls = QGroupBox("SLSsteam (Headcrab) Installer")
@@ -106,16 +86,36 @@ class HubcapToolsWidget(QWidget):
         ddmod_layout.addLayout(ddmod_btn_layout)
 
         layout.addWidget(group_ddmod)
+
+        # 4. Manual Game Installation
+        group_manual = QGroupBox("Manual Game Installation")
+        group_manual.setStyleSheet("QGroupBox { border: 1px solid #333; border-radius: 6px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px; }")
+        manual_layout = QVBoxLayout(group_manual)
+        manual_layout.setSpacing(10)
+        
+        manual_info = QLabel("Install game manifests and keys manually using downloaded files.")
+        manual_info.setStyleSheet("color: #8B949E; font-size: 13px;")
+        manual_layout.addWidget(manual_info)
+        
+        manual_btn_layout = QHBoxLayout()
+        self.btn_install_zip = QPushButton("Install from .ZIP")
+        self.btn_install_zip.setProperty("cssClass", "PrimaryAction")
+        self.btn_install_zip.clicked.connect(self._install_local_zip_dialog)
+        
+        self.btn_install_lua = QPushButton("Install from .LUA")
+        self.btn_install_lua.setProperty("cssClass", "PrimaryAction")
+        self.btn_install_lua.clicked.connect(self._install_local_lua_dialog)
+        
+        manual_btn_layout.addWidget(self.btn_install_zip)
+        manual_btn_layout.addWidget(self.btn_install_lua)
+        manual_layout.addLayout(manual_btn_layout)
+        
+        layout.addWidget(group_manual)
         layout.addStretch()
 
         scroll.setWidget(content)
         main_layout.addWidget(scroll)
 
-    def _save_api_key(self):
-        SettingsManager.set("hubcap_api_key", self.api_key_input.text())
-        self.btn_save_api.setText("Saved!")
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(2000, lambda: self.btn_save_api.setText("Save API Key"))
 
     def _check_status(self) -> None:
         sls_dir = Path.home() / ".local" / "share" / "SLSsteam"
@@ -198,3 +198,24 @@ class HubcapToolsWidget(QWidget):
         finally:
             self.btn_uninstall_ddmod.setText("Uninstall")
             self.btn_uninstall_ddmod.setEnabled(True)
+
+
+    def _install_local_zip_dialog(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select ZIP file", "", "ZIP Files (*.zip)")
+        if file_path:
+            from src.services.download import DownloadManager
+            try:
+                DownloadManager.install_local_zip(file_path)
+                QMessageBox.information(self, "Success", f"Successfully installed from {Path(file_path).name}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to install: {e}")
+
+    def _install_local_lua_dialog(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select LUA file", "", "LUA Files (*.lua)")
+        if file_path:
+            from src.services.download import DownloadManager
+            try:
+                DownloadManager.install_local_lua(file_path)
+                QMessageBox.information(self, "Success", f"Successfully installed from {Path(file_path).name}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to install: {e}")

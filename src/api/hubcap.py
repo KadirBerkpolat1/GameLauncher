@@ -121,19 +121,15 @@ class HubcapClient:
         self._cache[cache_key] = data
         return data
 
-    async def get_app_manifest_zip(self, app_id: int, force_update: bool = False, content: str = "") -> bytes:
+    async def get_app_manifest_zip(self, app_id: int, branch: str = "public") -> bytes:
         """
         Download a game manifest ZIP file. Counts toward daily usage limit.
         """
         client = self._get_client()
-        params = {}
-        if force_update:
-            params["force_update"] = "true"
-        if content:
-            params["content"] = content
+        params = {"branch": branch}
             
         try:
-            response = await client.get(f"/manifest/{app_id}", params=params, timeout=60.0)
+            response = await client.get(f"/generate/appmanifest/{app_id}", params=params, timeout=60.0)
             response.raise_for_status()
             return response.content
         except httpx.HTTPStatusError as e:
@@ -165,6 +161,52 @@ class HubcapClient:
             raise HubcapAPIError(f"HTTP {e.response.status_code} while downloading lua for {app_id}") from e
         except httpx.RequestError as e:
             raise HubcapAPIError(f"Network error downloading lua: {e}") from e
+
+    async def get_depot_keys(self) -> Dict[str, Any]:
+        """
+        Get a list of all available depot IDs. Free endpoint.
+        """
+        client = self._get_client()
+        try:
+            response = await client.get("/depot-keys", timeout=15.0)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                raise HubcapAuthError("Invalid API key or exhausted quota (401).")
+            raise HubcapAPIError(f"HTTP {e.response.status_code} while getting depot keys") from e
+        except httpx.RequestError as e:
+            raise HubcapAPIError(f"Network error getting depot keys: {e}") from e
+
+    async def get_generate_usage(self) -> Dict[str, Any]:
+        """
+        Get generation usage limits and remaining quota. Free endpoint.
+        """
+        client = self._get_client()
+        try:
+            response = await client.get("/generate/usage", timeout=15.0)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                raise HubcapAuthError("Invalid API key or exhausted quota (401).")
+            raise HubcapAPIError(f"HTTP {e.response.status_code} while getting usage") from e
+        except httpx.RequestError as e:
+            raise HubcapAPIError(f"Network error getting usage: {e}") from e
+
+    async def get_health(self) -> dict:
+        """GET /health — free, no auth. Returns {"status": "healthy"|"degraded"}."""
+        async with httpx.AsyncClient(base_url=self.BASE_URL, timeout=8.0) as c:
+            try:
+                resp = await c.get("/health")
+                resp.raise_for_status()
+                return resp.json()
+            except httpx.RequestError as e:
+                raise HubcapAPIError(f"Network error on health check: {e}") from e
+
+    async def get_user_stats(self) -> dict:
+        """GET /user/stats — Bearer auth required. Returns usage stats; raises HubcapAuthError on 401."""
+        return await self._request("GET", "/user/stats")
 
     def clear_cache(self) -> None:
         """Clears the in-memory cache."""

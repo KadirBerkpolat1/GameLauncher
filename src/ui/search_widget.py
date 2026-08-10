@@ -1,4 +1,5 @@
 import asyncio
+from src.config.settings import SettingsManager
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, 
                                QScrollArea, QLabel, QPushButton, QCheckBox, 
                                QComboBox, QSpinBox)
@@ -17,6 +18,9 @@ class SearchWidget(QWidget):
         self.search_timer = QTimer()
         self.search_timer.setSingleShot(True)
         self.search_timer.timeout.connect(self._perform_search)
+        # Auto-load on first show if API key is configured
+        if SettingsManager.get("hubcap_api_key", ""):
+            QTimer.singleShot(100, self._load_library)
 
 
     def init_ui(self) -> None:
@@ -51,19 +55,22 @@ class SearchWidget(QWidget):
         self.cb_music = QCheckBox("Music")
         self.cb_apps = QCheckBox("Apps")
 
-        self.btn_load = QPushButton("Load")
-        self.btn_select_mode = QPushButton("Select Mode")
-        self.btn_list_view = QPushButton("List View")
-
         filters_bar.addWidget(self.combo_sort)
         filters_bar.addWidget(self.cb_adult)
         filters_bar.addSpacing(10)
+        
+        filters_bar.addWidget(self.cb_games)
+        filters_bar.addWidget(self.cb_dlc)
+        filters_bar.addWidget(self.cb_music)
+        filters_bar.addWidget(self.cb_apps)
+        
+        filters_bar.addStretch()
+        
         self.btn_load = QPushButton("Load")
         self.btn_load.clicked.connect(self._load_library)
         self.btn_select_mode = QPushButton("Select Mode")
-        filters_bar.addWidget(self.cb_music)
-        filters_bar.addWidget(self.cb_apps)
-        filters_bar.addStretch()
+        self.btn_list_view = QPushButton("List View")
+        
         filters_bar.addWidget(self.btn_load)
         filters_bar.addWidget(self.btn_select_mode)
         filters_bar.addWidget(self.btn_list_view)
@@ -146,8 +153,7 @@ class SearchWidget(QWidget):
     async def _fetch_search(self, query: str, is_appid: bool) -> None:
         try:
             results = await hubcap_api.search_game(query, limit=self.limit, appid=is_appid)
-            # Search API returns a list or a dict with data? Assume list for search based on old code
-            data = results if isinstance(results, list) else results.get("data", [])
+            data = results.get("results", []) if isinstance(results, dict) else results
             self._display_results(data)
         except Exception as e:
             self._clear_results()
@@ -159,24 +165,25 @@ class SearchWidget(QWidget):
         loop.create_task(self._fetch_library())
 
     async def _fetch_library(self) -> None:
+        if not SettingsManager.get("hubcap_api_key", ""):
+            self.status_label.setText("No API key set. Go to Settings → General to add your Hubcap API key.")
+            self.status_label.show()
+            return
         try:
             offset = (self.current_page - 1) * self.limit
             sort_by = "name" if "Name" in self.combo_sort.currentText() else "updated"
-            
-            # Pass filters
             search_term = self.search_input.text().strip()
-            
+
             results = await hubcap_api.get_library(limit=self.limit, offset=offset, search=search_term, sort_by=sort_by)
-            
-            # Handle API pagination metadata if it exists
-            if isinstance(results, dict) and "data" in results:
-                data = results["data"]
-                total = results.get("meta", {}).get("total", len(data))
+
+            if isinstance(results, dict):
+                data = results.get("games", [])
+                total = results.get("total_count", len(data))
                 self.total_pages = max(1, (total + self.limit - 1) // self.limit)
             else:
                 data = results if isinstance(results, list) else []
                 self.total_pages = max(1, self.current_page + (1 if len(data) == self.limit else 0))
-                
+
             self.lbl_page.setText(f"Page {self.current_page} of {self.total_pages}")
             self._display_results(data)
         except Exception as e:
@@ -221,9 +228,6 @@ class SearchWidget(QWidget):
             app_id = int(raw_id) if str(raw_id).isdigit() else 0
             title = game.get("game_name", "Unknown Game")
 
-            # Müzikleri (Soundtrack) ve eklentileri ana arama listesinden filtrele
-            if "soundtrack" in title.lower() or "artbook" in title.lower():
-                continue
 
             image_url = game.get("header_image", "")
             card = GameCard(app_id, title, image_url, mode="store")

@@ -68,39 +68,13 @@ class DDModInstaller:
 
 class SLSsteamInstaller:
     """
-    Downloads and runs slssteam_install.sh from the GameLauncher GitHub repo.
-    The shell script handles: AceSLS/SLSsteam 7z download → extract → copy .so files.
+    Downloads and runs h3adcr-b from the Deadboy666/h3adcr-b GitHub repo.
     """
-    INSTALL_SCRIPT_URL = (
-        "https://raw.githubusercontent.com/KadirBerkpolat1/GameLauncher/main/slssteam_install.sh"
-    )
-    TEMP_SCRIPT = Path("/tmp/slssteam_install.sh")
-
-    @classmethod
-    async def _fetch_script(cls) -> None:
-        """Downloads the install script from GitHub to a temp file."""
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            try:
-                resp = await client.get(cls.INSTALL_SCRIPT_URL, timeout=15.0)
-                resp.raise_for_status()
-                cls.TEMP_SCRIPT.write_bytes(resp.content)
-                cls.TEMP_SCRIPT.chmod(0o755)
-            except Exception as e:
-                raise InstallerError(f"Kurulum betiği indirilemedi: {e}")
-
     @classmethod
     async def update_slssteam(cls) -> str:
-        if not shutil.which("7z") and not shutil.which("7za"):
-            raise InstallerError(
-                "Sistemde '7z' bulunamadı. Lütfen önce p7zip (veya 7zip) kurun.\n"
-                "  Arch:   sudo pacman -S p7zip\n"
-                "  Debian: sudo apt install p7zip-full"
-            )
-
-        await cls._fetch_script()
-
-        proc = await asyncio.create_subprocess_exec(
-            "bash", str(cls.TEMP_SCRIPT), "install",
+        cmd = 'curl -fsSL https://raw.githubusercontent.com/Deadboy666/h3adcr-b/refs/heads/main/headcrab.sh | bash'
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
@@ -108,27 +82,25 @@ class SLSsteamInstaller:
         output = stdout.decode(errors="replace")
 
         if proc.returncode != 0:
-            raise InstallerError(f"SLSsteam kurulumu başarısız:\n{output}")
+            raise InstallerError(f"SLSsteam kurulumu (headcrab) başarısız:\n{output}")
 
-        # Sürüm etiketini çıktıdan al, yoksa "latest" döndür
-        for line in output.splitlines():
-            if "installed successfully" in line:
-                tag = line.split()[1] if len(line.split()) > 1 else "latest"
-                return tag
-        return "latest"
+        return "latest (h3adcr-b)"
 
     @classmethod
     async def uninstall_slssteam(cls) -> None:
-        await cls._fetch_script()
+        # headcrab.sh installs to ~/.local/share/SLSsteam or flatpak path.
+        # We manually remove it as headcrab.sh does not provide an uninstall command.
+        sls_paths = [
+            Path.home() / ".local" / "share" / "SLSsteam",
+            Path.home() / ".var" / "app" / "com.valvesoftware.Steam" / ".local" / "share" / "SLSsteam",
+            Path.home() / ".config" / "SLSsteam",
+            Path.home() / ".var" / "app" / "com.valvesoftware.Steam" / ".config" / "SLSsteam"
+        ]
+        for p in sls_paths:
+            if p.exists() and p.is_dir():
+                shutil.rmtree(p, ignore_errors=True)
 
-        proc = await asyncio.create_subprocess_exec(
-            "bash", str(cls.TEMP_SCRIPT), "uninstall",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        await proc.communicate()
-
-        # Flatpak override'ı temizle (varsa)
+        # Clean Flatpak override
         import subprocess
         subprocess.run(
             ["flatpak", "override", "--user",

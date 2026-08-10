@@ -49,11 +49,6 @@ class GameCard(QFrame):
             self.btn_download.setProperty("cssClass", "PrimaryAction")
             self.btn_download.clicked.connect(self._queue_download)
 
-            self.btn_dlc = QPushButton("DLC")
-            self.btn_dlc.setProperty("cssClass", "SecondaryAction")
-            self.btn_dlc.clicked.connect(self._show_dlc_dialog)
-
-            btn_layout.addWidget(self.btn_dlc)
             btn_layout.addWidget(self.btn_download)
         elif self.mode == "store":
             self.badge = QLabel("Available", self.image_label)
@@ -64,11 +59,6 @@ class GameCard(QFrame):
             self.btn_download.setProperty("cssClass", "PrimaryAction")
             self.btn_download.clicked.connect(self._queue_download)
 
-            self.btn_dlc = QPushButton("DLC")
-            self.btn_dlc.setProperty("cssClass", "SecondaryAction")
-            self.btn_dlc.clicked.connect(self._show_dlc_dialog)
-
-            btn_layout.addWidget(self.btn_dlc)
             btn_layout.addWidget(self.btn_download)
         elif self.mode == "queued":
             self.btn_commit = QPushButton("Download")
@@ -105,13 +95,14 @@ class GameCard(QFrame):
             self.image_label.setText("No Image")
 
     def _fetch_image(self, index: int = 0) -> None:
-        self.image_urls = [
+        self.image_urls = []
+        if self.image_url:
+            self.image_urls.append(self.image_url)
+        self.image_urls.extend([
             f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/library_600x900.jpg",
             f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/header.jpg",
             f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/capsule_616x353.jpg",
-        ]
-        if self.image_url:
-            self.image_urls.append(self.image_url)
+        ])
 
         if index < len(self.image_urls):
             self.current_url_index = index
@@ -209,42 +200,6 @@ class GameCard(QFrame):
         except Exception as e:
             self.btn_download.setText("Error")
             print(f"Error queueing download: {e}")
-
-    def _show_dlc_dialog(self) -> None:
-        """Opens the DLC selection dialog after fetching data from Steam."""
-        self.btn_dlc.setText("Yükleniyor...")
-        self.btn_dlc.setEnabled(False)
-        import asyncio
-        loop = asyncio.get_event_loop()
-        loop.create_task(self._async_show_dlc_dialog())
-        
-    async def _async_show_dlc_dialog(self) -> None:
-        try:
-            from src.api.steam_web import SteamWebAPI
-            dlcs = await SteamWebAPI().get_dlcs(self.app_id)
-            if not dlcs:
-                self.btn_dlc.setText("DLC Yok")
-                return
-            
-            from src.ui.dlc_dialog import DLCDialog
-            dialog = DLCDialog(self.window(), dlcs)
-            if dialog.exec():
-                selected = dialog.get_selected_dlcs()
-                if selected:
-                    from src.config.slssteam import SLSsteamConfigManager
-                    manager = SLSsteamConfigManager()
-                    for dlc in selected:
-                        manager.set_dlc_data(self.app_id, dlc["app_id"], dlc["name"])
-                    self.btn_dlc.setText(f"{len(selected)} DLC Seçildi")
-                else:
-                    self.btn_dlc.setText("DLC")
-            else:
-                self.btn_dlc.setText("DLC")
-        except Exception as e:
-            print(f"DLC çekme hatası: {e}")
-            self.btn_dlc.setText("Hata")
-        finally:
-            self.btn_dlc.setEnabled(True)
 
     def _remove_from_library(self) -> None:
         """Removes the game from the SLSsteam configuration and visually hides the card."""

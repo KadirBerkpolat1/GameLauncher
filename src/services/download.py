@@ -13,22 +13,13 @@ class DownloadManager:
     """
 
     @staticmethod
-    async def prepare_game_data(app_id: int) -> list:
-        """
-        Downloads the Hubcap ZIP, extracts .manifest files to Steam depotcache,
-        parses the .lua file for decryption keys, injects them into config.vdf,
-        and adds the game to SLSsteam config.yaml.
-        Returns a list of depot dictionaries for DDMod fallback.
-        """
-        from src.api.hubcap import hubcap_api
+    def process_zip_bytes(zip_bytes: bytes, app_id: int = None) -> list:
         import zipfile
         import io
         import re
         from src.utils.paths import get_steam_path
         from src.utils.vdf_parser import VDFManager
         from src.config.slssteam import SLSsteamConfigManager
-
-        zip_bytes = await hubcap_api.get_app_manifest_zip(app_id)
 
         steam_path = get_steam_path()
         vdf_mgr = None
@@ -39,7 +30,8 @@ class DownloadManager:
             vdf_mgr = VDFManager(steam_path)
 
         sls_manager = SLSsteamConfigManager()
-        sls_manager.add_additional_app(app_id)
+        if app_id:
+            sls_manager.add_additional_app(app_id)
 
         depots = {}
 
@@ -74,6 +66,65 @@ class DownloadManager:
 
         # Return list of depots for DDMod
         return [{"depot_id": k, "decryption_key": v.get("decryption_key"), "manifest_id": v.get("manifest_id")} for k, v in depots.items()]
+
+    @staticmethod
+    async def prepare_game_data(app_id: int) -> list:
+        """
+        Downloads the Hubcap ZIP, extracts .manifest files to Steam depotcache,
+        parses the .lua file for decryption keys, injects them into config.vdf,
+        and adds the game to SLSsteam config.yaml.
+        Returns a list of depot dictionaries for DDMod fallback.
+        """
+        from src.api.hubcap import hubcap_api
+        zip_bytes = await hubcap_api.get_app_manifest_zip(app_id)
+        return DownloadManager.process_zip_bytes(zip_bytes, app_id)
+
+    @staticmethod
+    def install_local_zip(file_path: str) -> None:
+        with open(file_path, "rb") as f:
+            zip_bytes = f.read()
+        DownloadManager.process_zip_bytes(zip_bytes)
+
+    @staticmethod
+    def install_local_lua(file_path: str) -> None:
+        import re
+        import shutil
+        from pathlib import Path
+        from src.utils.paths import get_steam_path
+        from src.utils.vdf_parser import VDFManager
+        from src.config.slssteam import SLSsteamConfigManager
+
+        steam_path = get_steam_path()
+        vdf_mgr = None
+        if steam_path:
+            vdf_mgr = VDFManager(steam_path)
+            plugin_dir = steam_path / "config" / "stplug-in"
+            plugin_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(file_path, plugin_dir)
+        else:
+            raise DownloadError("Steam path not found. Please configure it in Settings.")
+
+        sls_manager = SLSsteamConfigManager()
+
+        # Try to infer app_id from filename (e.g. 1091500.lua)
+        path_obj = Path(file_path)
+        if path_obj.stem.isdigit():
+            sls_manager.add_additional_app(int(path_obj.stem))
+
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+
+        for match in re.finditer(r'addappid\((\d+),\s*\d+,\s*"([a-fA-F0-9]+)"\)', content):
+            d_id, key = int(match.group(1)), match.group(2)
+            if vdf_mgr:
+                try: vdf_mgr.add_depot_key(d_id, key)
+                except: pass
+
+        for match in re.finditer(r'setManifestid\((\d+),\s*"(\d+)"', content):
+            d_id, m_id = int(match.group(1)), match.group(2)
+            sls_manager.set_manifest_id(d_id, m_id)
+
+        sls_manager.save()
 
     @staticmethod
     def install_via_steam(app_id: int) -> None:
