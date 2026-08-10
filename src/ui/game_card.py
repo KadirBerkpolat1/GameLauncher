@@ -208,24 +208,40 @@ class GameCard(QFrame):
     def _apply_fix_auto(self) -> None:
         from src.utils.onlinefix_patcher import OnlineFixPatcher
         from PySide6.QtWidgets import QMessageBox, QFileDialog
+        from PySide6.QtCore import QTimer
         from pathlib import Path
+        import subprocess
 
         target_path = getattr(self, '_installed_path', None)
 
-        # Eğer otomatik yol bulunamazsa veya geçerli değilse Manuel Seçime düş (Fallback)
         if not target_path or not Path(target_path).exists():
             default_dir = str(Path.home() / ".local/share/Steam/steamapps/common")
-            target_path = QFileDialog.getExistingDirectory(self, "Oyun Klasörünü Seçin (Otomatik Bulunamadı)", default_dir)
+            target_path = QFileDialog.getExistingDirectory(self, "Oyun Klasörünü Seçin", default_dir)
 
         if not target_path:
-            return # Kullanıcı iptal etti
+            return
 
-        try:
-            OnlineFixPatcher.apply_patch(self.app_id, target_path)
-            QMessageBox.information(self, "Başarılı", f"OnlineFix başarıyla uygulandı!\n\nKlasör: {target_path}")
-        except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Yama uygulanırken hata oluştu:\n{e}")
+        self.btn_apply_fix.setEnabled(False)
+        self.btn_apply_fix.setText("Steam Kapatılıyor...")
 
+        def do_patch():
+            try:
+                OnlineFixPatcher.apply_patch(self.app_id, target_path)
+                subprocess.Popen(["steam"], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                QMessageBox.information(self, "Başarılı", f"OnlineFix uygulandı ve Steam yeniden başlatılıyor!\n\nKlasör: {target_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Hata", f"Yama uygulanırken hata oluştu:\n{e}")
+            finally:
+                if getattr(self, 'btn_apply_fix', None):
+                    self.btn_apply_fix.setEnabled(True)
+                    self.btn_apply_fix.setText("Apply Fix")
+
+        res = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
+        if res.returncode == 0:
+            subprocess.run(["steam", "-shutdown"], check=False)
+            QTimer.singleShot(4000, do_patch)
+        else:
+            do_patch()
     def _uninstall_game(self) -> None:
         from PySide6.QtWidgets import QMessageBox
 
