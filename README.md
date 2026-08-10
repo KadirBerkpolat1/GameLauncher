@@ -30,7 +30,7 @@ repo, sets up the Python venv, installs all dependencies, and creates a desktop
 shortcut. Re-running it upgrades an existing install.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KadirBerkpolat1/GameLauncher/main/install.sh | bash
+curl -fsSL https://cdn.jsdelivr.net/gh/KadirBerkpolat1/GameLauncher@main/install.sh | bash
 ```
 
 Prerequisites: **Python 3.11+**. `p7zip` is optional but recommended (SLSsteam
@@ -80,7 +80,7 @@ If you wish to remove GameLauncher, its virtual environments, and downloaded met
 
 ```bash
 # Single command (no repo needed)
-curl -fsSL https://raw.githubusercontent.com/KadirBerkpolat1/GameLauncher/main/uninstall.sh | bash
+curl -fsSL https://cdn.jsdelivr.net/gh/KadirBerkpolat1/GameLauncher@main/uninstall.sh | bash
 
 # Or from a local checkout
 ./uninstall.sh

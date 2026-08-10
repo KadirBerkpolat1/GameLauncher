@@ -4,7 +4,7 @@ set -euo pipefail
 # ─────────────────────────────────────────────
 #  Nebula Launcher (GameLauncher) - Kurulum Betiği (Linux)
 #  Tek komutla çalışır:
-#    curl -fsSL https://raw.githubusercontent.com/KadirBerkpolat1/GameLauncher/main/install.sh | bash
+#    curl -fsSL https://cdn.jsdelivr.net/gh/KadirBerkpolat1/GameLauncher@main/install.sh | bash
 #  Güvenli yeniden çalıştırılabilir: mevcut kurulumu yükseltir.
 # ─────────────────────────────────────────────
 
@@ -246,5 +246,5 @@ echo
 echo -e "  Çalıştırmak için:  ${CYAN}$BIN_NAME${NC}"
 echo -e "  Veya menüden:      ${CYAN}$APP_NAME${NC} uygulamasını arayın"
 echo -e "  Kaldırmak için:    ${YELLOW}./uninstall.sh${NC} (repo) veya"
-echo -e "    ${CYAN}curl -fsSL ${REPO_URL}/raw/$BRANCH/uninstall.sh | bash${NC}"
+echo -e "    ${CYAN}curl -fsSL https://cdn.jsdelivr.net/gh/KadirBerkpolat1/GameLauncher@main/uninstall.sh | bash${NC}"
 echo
