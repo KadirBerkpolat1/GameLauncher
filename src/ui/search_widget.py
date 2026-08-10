@@ -2,15 +2,13 @@ from src.config.settings import SettingsManager
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, 
                                QScrollArea, QLabel, QPushButton, QCheckBox, 
                                QComboBox, QSpinBox)
-from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import Qt, QTimer, QUrl
 from src.api.hubcap import hubcap_api
 from src.ui.game_card import GameCard
 from src.ui.flow_layout import FlowLayout
 from src.utils.async_utils import get_async_loop
 
 class SearchWidget(QWidget):
-    download_requested = Signal(int, str)
-
     def __init__(self) -> None:
         super().__init__()
         self.current_page = 1
@@ -259,7 +257,6 @@ class SearchWidget(QWidget):
 
                 image_url = game.get("header_image", "")
                 card = GameCard(app_id, title, image_url, mode="store")
-                card.download_requested.connect(self.download_requested.emit)
                 self.results_layout.addWidget(card)
 
     def _create_list_row(self, game: dict) -> QWidget:
@@ -298,7 +295,7 @@ class SearchWidget(QWidget):
 
         add_btn = QPushButton("Add to Library")
         add_btn.setProperty("cssClass", "PrimaryAction")
-        add_btn.clicked.connect(lambda checked=False, a=app_id, t=title, b=add_btn: self._add_to_library(a, t, b))
+        add_btn.clicked.connect(lambda: self._add_to_library(app_id, add_btn))
         row_layout.addWidget(add_btn)
 
         if app_id and image_url:
@@ -341,10 +338,21 @@ class SearchWidget(QWidget):
         reply = manager.get(req)
         reply.finished.connect(lambda r=reply: on_loaded(r))
 
-    def _add_to_library(self, app_id: int, title: str, btn: QPushButton) -> None:
-        btn.setText("Queuing...")
+    def _add_to_library(self, app_id: int, btn: QPushButton) -> None:
+        btn.setText("Adding...")
         btn.setEnabled(False)
-        self.download_requested.emit(app_id, title)
+        loop = get_async_loop()
+        loop.create_task(self._async_add(app_id, btn))
+
+    async def _async_add(self, app_id: int, btn: QPushButton) -> None:
+        try:
+            from src.services.download import DownloadManager
+            await DownloadManager.prepare_game_data(app_id, scope="full")
+            btn.setText("Added")
+        except Exception as e:
+            btn.setText("Error")
+            btn.setEnabled(True)
+            print(f"Error adding {app_id}: {e}")
 
     def _toggle_list_view(self) -> None:
         self.list_mode = not self.list_mode

@@ -140,7 +140,6 @@ class MainWindow(QMainWindow):
         self.btn_support.clicked.connect(lambda: self._switch_view(5, self.btn_support))
         self.btn_settings.clicked.connect(self._open_settings)
         self.library_view.download_requested.connect(self._handle_download_request)
-        self.search_view.download_requested.connect(self._handle_download_request)
         self.library_view.restart_steam_requested.connect(self._restart_steam)
 
     def _handle_download_request(self, app_id: int, title: str) -> None:

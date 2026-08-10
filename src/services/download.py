@@ -150,30 +150,10 @@ class DownloadManager:
             return {}
 
     @staticmethod
-    def parse_lua_for_depots(lua_content: str, app_id: int) -> list:
-        """Parses LUA and returns the depot list for the Accela-style DDMod flow."""
-        parsed = DownloadManager._parse_lua(lua_content, app_id)
-        depots = []
-
-        for d_id, data in parsed.get("depots", {}).items():
-            entry = {
-                "depot_id": d_id,
-                "decryption_key": data.get("key"),
-                "manifest_id": None,
-            }
-            depots.append(entry)
-
-        # setManifestid(depot_id, "manifest_id", ...)
-        for match in re.finditer(r'setManifestid\((\d+),\s*"(\d+)"', lua_content):
-            d_id, m_id = int(match.group(1)), match.group(2)
-            for depot in depots:
-                if int(depot["depot_id"]) == d_id:
-                    depot["manifest_id"] = m_id
-
-        return depots
-
-    @staticmethod
-    def apply_steam_side_effects(lua_content: str, app_id: int):
+    def process_lua_content(lua_content: str, app_id: int) -> list:
+        """Parses LUA, applying SLSsteam side effects (config.vdf keys,
+        ManifestIds, AdditionalApps) so the Steam client flow also works.
+        Returns the depot list for the Accela-style DDMod flow."""
         from src.utils.paths import get_steam_path
         from src.utils.vdf_parser import VDFManager
         from src.config.slssteam import SLSsteamConfigManager
@@ -185,8 +165,15 @@ class DownloadManager:
             sls_manager.add_additional_app(app_id)
 
         parsed = DownloadManager._parse_lua(lua_content, app_id)
+        depots = []
 
         for d_id, data in parsed.get("depots", {}).items():
+            entry = {
+                "depot_id": d_id,
+                "decryption_key": data.get("key"),
+                "manifest_id": None,
+            }
+            depots.append(entry)
             if vdf_mgr:
                 try:
                     vdf_mgr.add_depot_key(d_id, data.get("key"))
@@ -197,8 +184,12 @@ class DownloadManager:
         for match in re.finditer(r'setManifestid\((\d+),\s*"(\d+)"', lua_content):
             d_id, m_id = int(match.group(1)), match.group(2)
             sls_manager.set_manifest_id(d_id, m_id)
+            for depot in depots:
+                if int(depot["depot_id"]) == d_id:
+                    depot["manifest_id"] = m_id
 
         sls_manager.save()
+        return depots
 
     @staticmethod
     async def _get_manifest_zip_cached(app_id: int) -> bytes:
@@ -249,8 +240,8 @@ class DownloadManager:
             zip_bytes
         )
 
-        # Get the depot list for the Accela-style DDMod flow
-        depot_list = DownloadManager.parse_lua_for_depots(lua_content, app_id)
+        # Side effects for the SLSsteam flow (config.vdf keys, ManifestIds).
+        depot_list = DownloadManager.process_lua_content(lua_content, app_id)
 
         parsed = DownloadManager._parse_lua(lua_content, app_id)
         depots = {}
@@ -281,7 +272,6 @@ class DownloadManager:
                 if d.get("manifest_id")
             },
             "manifest_dir": manifest_dir,
-            "lua_content": lua_content,
         }
 
         # Store installdir back onto parsed for callers that use process_lua_content output.
@@ -295,7 +285,11 @@ class DownloadManager:
         with open(file_path, "rb") as f:
             zip_bytes = f.read()
         lua_content, _manifest_map, _manifest_dir = DownloadManager.process_zip_bytes(zip_bytes)
-        DownloadManager.apply_steam_side_effects(lua_content, None)
+        from src.config.slssteam import SLSsteamConfigManager
+
+        sls_manager = SLSsteamConfigManager()
+        depots = DownloadManager.process_lua_content(lua_content, None)
+        _ = depots
 
     @staticmethod
     def install_local_lua(file_path: str) -> None:
@@ -323,7 +317,8 @@ class DownloadManager:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
-        DownloadManager.apply_steam_side_effects(content, int(path_obj.stem) if path_obj.stem.isdigit() else None)
+        depots = DownloadManager.process_lua_content(content, int(path_obj.stem) if path_obj.stem.isdigit() else None)
+        _ = depots
 
     @staticmethod
     def install_via_steam(app_id: int) -> None:

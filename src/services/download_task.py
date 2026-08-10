@@ -298,11 +298,6 @@ class DownloadTask:
         if self.game_data.get("apply_onlinefix", False) and ((root_dir / "assets" / "onlinefix").exists() or (root_dir / "REPO_Fix_Repair_Steam_V5_Generic").exists()):
             OnlineFixPatcher.apply_patch(str(self.app_id), self.download_dir)
 
-        lua_content = self.game_data.get("lua_content")
-        if lua_content:
-            from src.services.download import DownloadManager
-            DownloadManager.apply_steam_side_effects(lua_content, self.app_id)
-
     def _set_linux_binary_permissions(self):
         """Marks ELF/sh binaries executable after download (Accela parity)."""
         import sys
