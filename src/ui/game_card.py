@@ -4,6 +4,23 @@ from PySide6.QtCore import Qt, QUrl, Signal, QTimer
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from src.utils.async_utils import get_async_loop
 
+def get_installed_game_path(app_id: int):
+    from src.utils.paths import get_steam_libraries
+    from pathlib import Path
+    import vdf
+    for lib in get_steam_libraries():
+        acf = Path(lib) / "steamapps" / f"appmanifest_{app_id}.acf"
+        if acf.exists():
+            try:
+                with open(acf, 'r', encoding='utf-8') as f:
+                    data = vdf.load(f)
+                    installdir = data.get("AppState", {}).get("installdir", "")
+                    if installdir:
+                        return str(Path(lib) / "steamapps" / "common" / installdir)
+            except:
+                pass
+    return None
+
 class GameCard(QFrame):
     """
     A visual card representing a single game in the library or search results.
@@ -83,12 +100,12 @@ class GameCard(QFrame):
             self.btn_download.setProperty("cssClass", "PrimaryAction")
             self.btn_download.clicked.connect(self._request_download)
 
-            self.btn_apply_fix = QPushButton("Apply Fix")
-            self.btn_apply_fix.clicked.connect(self._apply_fix_manually)
-
-            btn_layout.addWidget(self.btn_uninstall)
-            btn_layout.addWidget(self.btn_download)
-            btn_layout.addWidget(self.btn_apply_fix)
+            installed_path = get_installed_game_path(self.app_id)
+            if installed_path:
+                self.btn_apply_fix = QPushButton("Apply Fix")
+                self.btn_apply_fix.clicked.connect(self._apply_fix_auto)
+                btn_layout.addWidget(self.btn_apply_fix)
+            self._installed_path = installed_path
         layout.addLayout(btn_layout)
 
         # Network Manager for Image Downloading
@@ -184,20 +201,11 @@ class GameCard(QFrame):
     def _request_download(self) -> None:
         self.download_requested.emit(self.app_id, self.title)
 
-    def _apply_fix_manually(self) -> None:
-        from PySide6.QtWidgets import QFileDialog, QMessageBox
-        from pathlib import Path
-        
-        folder = QFileDialog.getExistingDirectory(self, "Select Game Folder to Patch", str(Path.home() / ".local/share/Steam/steamapps/common"))
-        if not folder:
-            return
-            
+    def _apply_fix_auto(self) -> None:
         from src.utils.onlinefix_patcher import OnlineFixPatcher
-        try:
-            OnlineFixPatcher.apply_patch(self.app_id, folder)
-            QMessageBox.information(self, "Success", "OnlineFix applied successfully!")
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to apply OnlineFix:\n{e}")
+        from PySide6.QtWidgets import QMessageBox
+        OnlineFixPatcher.apply_patch(self.app_id, self._installed_path)
+        QMessageBox.information(self, "Success", "OnlineFix applied successfully!")
 
     def _uninstall_game(self) -> None:
         """Asks for confirmation, then fully uninstalls the game (files,
