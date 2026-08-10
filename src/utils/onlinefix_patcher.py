@@ -1,8 +1,13 @@
 import os
 import shutil
+import subprocess
+import tempfile
 import configparser
 from pathlib import Path
 from src.utils.vdf_parser import LocalConfigManager
+
+ARCHIVE_PASSWORD = "online-fix.me"
+
 
 class OnlineFixPatcher:
     @staticmethod
@@ -28,6 +33,71 @@ class OnlineFixPatcher:
             else:
                 shutil.copy2(item, dest)
 
+        OnlineFixPatcher._finalize(app_id, game_dir)
+
+    @staticmethod
+    def _find_extractor() -> str:
+        """7z/7za/7zz veya bsdtar bulur; yoksa None."""
+        for exe in ("7z", "7za", "7zz", "bsdtar"):
+            if shutil.which(exe):
+                return exe
+        return None
+
+    @staticmethod
+    def apply_patch_from_archive(rar_path: str, app_id: str, game_dir: str,
+                                 password: str = ARCHIVE_PASSWORD) -> str:
+        """
+        Internetten inilen fix arşivini (rar/zip) şifresiyle açar ve oyun
+        klasörüne uygular. OnlineFix.ini AppId güncellemesi ve launch
+        options burada da yapılır.
+
+        Returns: açılan geçici klasörün yolu (temizlik arayana bırakılır).
+        """
+        extractor = OnlineFixPatcher._find_extractor()
+        if not extractor:
+            raise FileNotFoundError("7z veya bsdtar bulunamadı! p7zip kurun.")
+
+        rar_path = str(Path(rar_path).resolve())
+        if not os.path.exists(rar_path):
+            raise FileNotFoundError(f"Fix arşivi bulunamadı: {rar_path}")
+
+        # Her iki taraf da rar/zip şifresi için benzer bayraklar kullanır.
+        tmp = tempfile.mkdtemp(prefix="ofme_fix_")
+        if extractor == "bsdtar":
+            cmd = [extractor, "-xf", rar_path, "-C", tmp, "--passphrase", password]
+        else:
+            cmd = [extractor, "x", f"-p{password}", "-y", f"-o{tmp}", rar_path]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode not in (0, 1):  # 7z: 1 = uyarılı başarı
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise RuntimeError(
+                f"Arşiv açılamadı (extractor={extractor}, rc={result.returncode}). "
+                f"Stderr: {result.stderr.strip()[:400]}"
+            )
+
+        # Açılan içeriği oyun klasörüne kopyala (üst dizinler dahil).
+        game_path = Path(game_dir)
+        game_path.mkdir(parents=True, exist_ok=True)
+        copied = 0
+        for item in Path(tmp).iterdir():
+            dest = game_path / item.name
+            if item.is_dir():
+                shutil.copytree(item, dest, dirs_exist_ok=True)
+            else:
+                shutil.copy2(item, dest)
+            copied += 1
+
+        if copied == 0:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise RuntimeError("Fix arşivi boş veya tanınamadı.")
+
+        OnlineFixPatcher._finalize(app_id, game_dir)
+        return tmp
+
+    @staticmethod
+    def _finalize(app_id: str, game_dir: str):
+        """OnlineFix.ini AppId günceller + Steam launch options ayarlar."""
         # Update OnlineFix.ini AppId
         ini_path = Path(game_dir) / "OnlineFix.ini"
         if ini_path.exists():

@@ -1,4 +1,5 @@
-from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
+from PySide6.QtWidgets import (QFrame, QVBoxLayout, QLabel, QPushButton, QHBoxLayout,
+                               QDialog, QListWidget, QListWidgetItem, QDialogButtonBox)
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt, QUrl, Signal, QTimer
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
@@ -20,6 +21,48 @@ def get_installed_game_path(app_id: int):
             except:
                 pass
     return None
+
+
+def _titles_match(found: str, expected: str) -> bool:
+    """online-fix.me basligi ile kullanici oyun adini normalize edip karsilastirir."""
+    import html as _html
+    import re as _re
+    def norm(s: str) -> str:
+        return _re.sub(r"[\W_]+", "", _html.unescape(s).lower().strip())
+    fn, en = norm(found), norm(expected)
+    return bool(fn and (fn == en or fn in en or en in fn))
+
+
+class _GamePickDialog(QDialog):
+    """online-fix.me arama sonuclari arasindan dogru oyunu sectirir."""
+
+    def __init__(self, results: list, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Fix Kaynağını Seçin")
+        self.setMinimumWidth(440)
+        layout = QVBoxLayout(self)
+
+        lbl = QLabel("online-fix.me'de şu oyunlar bulundu. Doğru olanı seçin:")
+        layout.addWidget(lbl)
+
+        self.list_widget = QListWidget()
+        for r in results:
+            item = QListWidgetItem(r.get("title") or r.get("url", ""))
+            item.setData(Qt.ItemDataRole.UserRole, r)
+            self.list_widget.addItem(item)
+        self.list_widget.itemDoubleClicked.connect(self.accept)
+        layout.addWidget(self.list_widget)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def selected(self) -> dict:
+        item = self.list_widget.currentItem()
+        return item.data(Qt.ItemDataRole.UserRole) if item else {}
 
 class GameCard(QFrame):
     """
@@ -206,9 +249,12 @@ class GameCard(QFrame):
         self.download_requested.emit(self.app_id, self.title)
 
     def _apply_fix_auto(self) -> None:
-        from src.utils.onlinefix_patcher import OnlineFixPatcher
+        """
+        Apply Fix: once internetten (online-fix.me) oyunun fix arşivini çekmeyi
+        dener; başarısız olursa yerel assets/onlinefix şablonuna düşer.
+        Steam çalışıyorsa önce kapatılır, yama sonrası yeniden başlatılır.
+        """
         from PySide6.QtWidgets import QMessageBox, QFileDialog
-        from PySide6.QtCore import QTimer
         from pathlib import Path
         import subprocess
 
@@ -221,27 +267,141 @@ class GameCard(QFrame):
         if not target_path:
             return
 
+        self._fix_target_path = target_path
         self.btn_apply_fix.setEnabled(False)
         self.btn_apply_fix.setText("Steam Kapatılıyor...")
-
-        def do_patch():
-            try:
-                OnlineFixPatcher.apply_patch(self.app_id, target_path)
-                subprocess.Popen(["steam"], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                QMessageBox.information(self, "Başarılı", f"OnlineFix uygulandı ve Steam yeniden başlatılıyor!\n\nKlasör: {target_path}")
-            except Exception as e:
-                QMessageBox.critical(self, "Hata", f"Yama uygulanırken hata oluştu:\n{e}")
-            finally:
-                if getattr(self, 'btn_apply_fix', None):
-                    self.btn_apply_fix.setEnabled(True)
-                    self.btn_apply_fix.setText("Apply Fix")
 
         res = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
         if res.returncode == 0:
             subprocess.run(["steam", "-shutdown"], check=False)
-            QTimer.singleShot(4000, do_patch)
+            QTimer.singleShot(4000, self._start_fix_download)
         else:
-            do_patch()
+            self._start_fix_download()
+
+    def _start_fix_download(self) -> None:
+        self.btn_apply_fix.setText("Fix çekiliyor...")
+        get_async_loop().create_task(self._async_fetch_and_apply_fix())
+
+    async def _async_fetch_and_apply_fix(self) -> None:
+        """
+        Async akış: oyun ara -> hosters linkini bul -> fix seç -> indir -> uygula.
+        Hata olursa yerel şablondan uygular.
+        """
+        import os
+        import subprocess
+        import tempfile
+        from pathlib import Path
+        from urllib.parse import urlparse, unquote
+
+        from PySide6.QtWidgets import QMessageBox
+
+        from src.api.onlinefix import OnlineFixClient, OnlineFixError, OnlineFixNotFoundError
+        from src.utils.onlinefix_patcher import OnlineFixPatcher
+
+        target_path = getattr(self, '_fix_target_path', None)
+        if not target_path:
+            return
+
+        client = OnlineFixClient()
+        downloaded = None
+        extracted_tmp = None
+        used_online = False
+        try:
+            self.btn_apply_fix.setText("Oyun aranıyor...")
+            results = await client.search_game(self.title)
+            if not results:
+                raise OnlineFixNotFoundError("Oyun online-fix.me'de bulunamadı.")
+
+            # Birden fazla sonuç varsa kullanıcı seçer (yanlış fix riski sıfırlanır).
+            if len(results) > 1:
+                dlg = _GamePickDialog(results, self)
+                if dlg.exec() != QDialog.DialogCode.Accepted:
+                    return
+                picked = dlg.selected()
+                if not picked.get("url"):
+                    return
+                game_url = picked["url"]
+            else:
+                game_url = results[0]["url"]
+                found_title = results[0].get("title", "")
+                if found_title and not _titles_match(found_title, self.title):
+                    box = QMessageBox(self)
+                    box.setWindowTitle("Oyun Eşleşmedi")
+                    box.setIcon(QMessageBox.Icon.Warning)
+                    box.setText(
+                        f"online-fix.me'de bulunan oyun:\n<b>{found_title}</b>\n\n"
+                        f"Sizin seçiminiz:\n<b>{self.title}</b>\n\n"
+                        "Yine de bu fix'i indirip uygulamak ister misiniz?"
+                    )
+                    btn_yes = box.addButton("Evet, uygula", QMessageBox.ButtonRole.AcceptRole)
+                    box.addButton("Hayır, iptal", QMessageBox.ButtonRole.RejectRole)
+                    box.exec()
+                    if box.clickedButton() is not btn_yes:
+                        return
+
+            self.btn_apply_fix.setText("İndirme linkleri alınıyor...")
+            page = await client.get_game_page(game_url)
+            hoster_url = page.get("hoster_link")
+            if not hoster_url:
+                raise OnlineFixNotFoundError("Hoster bağlantısı bulunamadı.")
+
+            game_name = unquote(urlparse(hoster_url).path.strip("/"))
+            entries = await client.get_fix_entries(game_name)
+            fix = client.pick_fix(entries)
+            if not fix:
+                raise OnlineFixNotFoundError("Güvenli fix dosyası bulunamadı.")
+
+            direct, cookies = await client.resolve_direct(fix)
+            dest = os.path.join(tempfile.gettempdir(), f"ofme_{self.app_id}_{fix['file_name']}")
+            self.btn_apply_fix.setText(f"İndiriliyor: {fix['file_name'][:24]}")
+            await client.download(direct, dest, cookies)
+            downloaded = dest
+
+            self.btn_apply_fix.setText("Uygulanıyor...")
+            extracted_tmp = OnlineFixPatcher.apply_patch_from_archive(
+                downloaded, str(self.app_id), target_path
+            )
+            used_online = True
+        except OnlineFixError as e:
+            self.btn_apply_fix.setText("Yerel şablondan uygulanıyor...")
+            try:
+                OnlineFixPatcher.apply_patch(self.app_id, target_path)
+                QMessageBox.warning(
+                    self, "Kısmi",
+                    f"İnternetten fix çekilemedi ({e}). Yerel şablondan uygulandı.",
+                )
+            except Exception as local_err:
+                QMessageBox.critical(
+                    self, "Hata",
+                    f"İnternet fix'i: {e}\nYerel şablon: {local_err}",
+                )
+                return
+        except Exception as e:
+            QMessageBox.critical(self, "Hata", f"Fix uygulanırken hata oluştu:\n{e}")
+            return
+        finally:
+            if downloaded and os.path.exists(downloaded):
+                try:
+                    os.remove(downloaded)
+                except OSError:
+                    pass
+            if extracted_tmp and os.path.isdir(extracted_tmp):
+                import shutil
+                shutil.rmtree(extracted_tmp, ignore_errors=True)
+            await client.close()
+
+        if used_online:
+            QMessageBox.information(
+                self, "Başarılı",
+                f"OnlineFix indirildi ve uygulandı, Steam yeniden başlatılıyor!\n\nKlasör: {target_path}",
+            )
+
+        subprocess.Popen(
+            ["steam"], start_new_session=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        self.btn_apply_fix.setEnabled(True)
+        self.btn_apply_fix.setText("Apply Fix")
     def _uninstall_game(self) -> None:
         from PySide6.QtWidgets import QMessageBox
 
