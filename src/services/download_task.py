@@ -16,6 +16,8 @@ class DownloadTask:
     Manages a multi-depot download session for a single game via DepotDownloaderMod.
     Supports pause, resume, and cancel by controlling the underlying subprocess.
     """
+    _support_cache: dict = {}
+
     def __init__(self, app_id: int, title: str, depots: list):
         self.app_id = app_id
         self.title = title
@@ -24,6 +26,27 @@ class DownloadTask:
         self.is_canceled = False
         self.current_process = None
         self._current_depot_idx = 0
+
+    async def _supports_depotkeys(self, ddmod_path: Path) -> bool:
+        """Detects whether the binary supports -depotkeys (modded fork vs vanilla)."""
+        cache_key = str(ddmod_path)
+        if cache_key in self._support_cache:
+            return self._support_cache[cache_key]
+
+        supported = False
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                str(ddmod_path),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT
+            )
+            out, _ = await proc.communicate()
+            supported = "-depotkeys" in out.decode("utf-8", errors="replace").lower()
+        except Exception:
+            supported = False
+
+        self._support_cache[cache_key] = supported
+        return supported
 
     def pause(self):
         self.is_paused = True
@@ -59,6 +82,7 @@ class DownloadTask:
         # Build a depot keys file from the decryption keys already fetched via Hubcap.
         # This lets DepotDownloaderMod download anonymously without relying on config.vdf.
         keys_file_path = None
+        supports_depotkeys = False
         try:
             key_lines = [
                 f"{d['depot_id']};{d['decryption_key']}"
@@ -69,9 +93,17 @@ class DownloadTask:
             # to config.vdf/credentials so a missing key doesn't break the whole batch.
             all_have_keys = len(key_lines) == len(self.depots) and bool(key_lines)
             if all_have_keys:
-                with tempfile.NamedTemporaryFile(mode="w", suffix=".keys", delete=False, encoding="utf-8") as f:
-                    f.write("\n".join(key_lines) + "\n")
-                    keys_file_path = f.name
+                supports_depotkeys = await self._supports_depotkeys(ddmod_path)
+                if supports_depotkeys:
+                    with tempfile.NamedTemporaryFile(mode="w", suffix=".keys", delete=False, encoding="utf-8") as f:
+                        f.write("\n".join(key_lines) + "\n")
+                        keys_file_path = f.name
+                elif error_callback:
+                    error_callback(
+                        "Uyarı: DDMod binary'si -depotkeys desteklemiyor (vanilla build).\n"
+                        "Anonim indirme için modlanmış DepotDownloaderMod gerekli; değilse "
+                        "Settings → download_method='steam' ile SLSsteam akışını kullanın."
+                    )
 
             while self._current_depot_idx < len(self.depots):
                 if self.is_canceled:
@@ -146,7 +178,15 @@ class DownloadTask:
                         await self.current_process.wait()
                         if self.current_process.returncode != 0:
                             if error_callback:
-                                error_callback(f"DepotDownloaderMod exited with code {self.current_process.returncode}")
+                                hint = ""
+                                if not steam_username:
+                                    hint = (
+                                        "\n\nİpucu: Anonim DDMod, lisanslı olmayan depot'ları indiremez "
+                                        "('Depot not available from this account'). Kullanıcı adı/şifre "
+                                        "girmek yerine Settings → download_method='steam' ile SLSsteam "
+                                        "akışını kullanın; Steam client depotcache manifest'leriyle indirir."
+                                    )
+                                error_callback(f"DepotDownloaderMod exited with code {self.current_process.returncode}{hint}")
                             return
                         
                         # Successfully completed this depot
