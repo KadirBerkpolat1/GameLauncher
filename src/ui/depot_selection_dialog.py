@@ -43,6 +43,7 @@ class DepotSelectionDialog(QDialog):
         self.metadata = metadata
         self.app_name = app_name
         self.checkboxes = {}
+        self._checkbox_data = {}
         self.image_labels = {}
 
         self.init_ui()
@@ -64,17 +65,24 @@ class DepotSelectionDialog(QDialog):
         base_group = QGroupBox("Temel Oyun")
         base_group.setStyleSheet("QGroupBox { font-weight: bold; color: #E6EDF3; border: 1px solid #30363D; border-radius: 6px; margin-top: 8px; padding: 8px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; }")
         base_layout = QVBoxLayout(base_group)
-
-        base_label_text = f"{self.metadata['base']['name']} (Zorunlu)"
-        size_str = self._format_size(self.metadata["base"]["size"])
-        if size_str:
-            base_label_text += f"  —  {size_str}"
-
-        self.base_checkbox = QCheckBox(base_label_text)
-        self.base_checkbox.setStyleSheet(CHECKBOX_STYLE)
-        self.base_checkbox.setChecked(True)
-        self.base_checkbox.setEnabled(False)
-        base_layout.addWidget(self.base_checkbox)
+        for base_key in ["base_common", "base_windows", "base_linux"]:
+            base_info = self.metadata.get(base_key)
+            if base_info and base_info["depots"]:
+                label_text = base_info["name"]
+                if base_info.get("required"):
+                    label_text += " (Zorunlu)"
+                size_str = self._format_size(base_info["size"])
+                if size_str:
+                    label_text += f"  —  {size_str}"
+                
+                cb = QCheckBox(label_text)
+                cb.setStyleSheet(CHECKBOX_STYLE)
+                cb.setChecked(True)
+                if base_info.get("required"):
+                    cb.setEnabled(False)
+                
+                self._checkbox_data[cb] = base_info["depots"]
+                base_layout.addWidget(cb)
         layout.addWidget(base_group)
 
         # --- DLCs ---
@@ -198,7 +206,11 @@ class DepotSelectionDialog(QDialog):
         return f"{mb:.1f} MB"
 
     def get_selected_depots(self) -> list:
-        selected = list(self.metadata["base"]["depots"])
+        selected = []
+        for cb, depots in self._checkbox_data.items():
+            if cb.isChecked():
+                selected.extend(depots)
+                
         for dlc_id, cb in self.checkboxes.items():
             if cb.isChecked():
                 selected.extend(self.metadata["dlcs"][dlc_id]["depots"])

@@ -15,11 +15,9 @@ class MetadataFetcher:
         - size: (optional, based on maxsize)
         """
         metadata = {
-            "base": {
-                "name": "Base Game Content",
-                "depots": [],
-                "size": 0
-            },
+            "base_common": {"name": "Temel Oyun (Ortak Dosyalar)", "depots": [], "size": 0, "required": True},
+            "base_windows": {"name": "Windows Dosyaları", "depots": [], "size": 0, "required": False},
+            "base_linux": {"name": "Linux Dosyaları", "depots": [], "size": 0, "required": False},
             "dlcs": {}
         }
         
@@ -32,8 +30,8 @@ class MetadataFetcher:
                     steam_depots = data.get("depots", {})
         except Exception as e:
             logging.error(f"Failed to fetch depot metadata from steamcmd.net: {e}")
-            # Fallback: put everything in base
-            metadata["base"]["depots"] = hubcap_depots.copy()
+            # Fallback: put everything in base_common
+            metadata["base_common"]["depots"] = hubcap_depots.copy()
             return metadata
             
         dlc_appids = set()
@@ -44,7 +42,7 @@ class MetadataFetcher:
             
             # Skip non-dict info if any malformed data exists
             if not isinstance(d_info, dict):
-                metadata["base"]["depots"].append(depot_id)
+                metadata["base_common"]["depots"].append(depot_id)
                 continue
                 
             # Filter OS
@@ -70,8 +68,15 @@ class MetadataFetcher:
                 metadata["dlcs"][dlc_appid_str]["depots"].append(depot_id)
                 metadata["dlcs"][dlc_appid_str]["size"] += maxsize
             else:
-                metadata["base"]["depots"].append(depot_id)
-                metadata["base"]["size"] += maxsize
+                if oslist and "windows" in oslist.lower():
+                    metadata["base_windows"]["depots"].append(depot_id)
+                    metadata["base_windows"]["size"] += maxsize
+                elif oslist and "linux" in oslist.lower():
+                    metadata["base_linux"]["depots"].append(depot_id)
+                    metadata["base_linux"]["size"] += maxsize
+                else:
+                    metadata["base_common"]["depots"].append(depot_id)
+                    metadata["base_common"]["size"] += maxsize
 
         # Resolve DLC names concurrently
         if dlc_appids:
