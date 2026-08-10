@@ -131,9 +131,10 @@ class DownloadsWidget(QWidget):
             download_method = SettingsManager.get("download_method", "steam")
             
             try:
-                # Extracts manifests for full game to parse Lua
-                depots = await DownloadManager.prepare_game_data(app_id, scope="full")
-                
+                # Prepare Accela-style game data (LUA keys + manifests + installdir).
+                game_data = await DownloadManager.prepare_game_data(app_id, scope="full")
+                depots = game_data.get("depots", {})
+
                 if download_method == "ddmod":
                     # --- Erken DDMod yolu kontrolü ---
                     from pathlib import Path
@@ -153,7 +154,7 @@ class DownloadsWidget(QWidget):
                     from src.ui.depot_selection_dialog import DepotSelectionDialog
                     import asyncio
 
-                    hubcap_depot_ids = [d.get("depot_id") for d in depots if d.get("depot_id")]
+                    hubcap_depot_ids = list(depots.keys())
                     metadata = await MetadataFetcher.fetch_depot_metadata(app_id, hubcap_depot_ids)
 
                     future = asyncio.Future()
@@ -178,9 +179,15 @@ class DownloadsWidget(QWidget):
                         print(f"User canceled installation for {app_id}")
                         return
 
-                    # Depot'ların manifest_id kontrolü
-                    selected_depots = [d for d in depots if d.get("depot_id") in selected_depot_ids]
-                    valid_depots = [d for d in selected_depots if d.get("manifest_id")]
+                    # Manifest'i olan depot'ları filtrele.
+                    selected_depots = {
+                        d_id: d for d_id, d in depots.items()
+                        if d_id in selected_depot_ids
+                    }
+                    valid_depots = {
+                        d_id: d for d_id, d in selected_depots.items()
+                        if d.get("manifest_id")
+                    }
                     if not valid_depots:
                         from PySide6.QtWidgets import QMessageBox
                         QMessageBox.warning(
@@ -190,9 +197,16 @@ class DownloadsWidget(QWidget):
                         )
                         return
 
+                    game_data["depots"] = valid_depots
+                    game_data["manifests"] = {
+                        d_id: d.get("manifest_id")
+                        for d_id, d in valid_depots.items()
+                        if d.get("manifest_id")
+                    }
+
                     from src.services.download_task import DownloadTask
 
-                    task = DownloadTask(app_id, title, valid_depots)
+                    task = DownloadTask(game_data, title)
                     dl_widget = ActiveDownloadWidget(task)
 
                     self.active_downloads_layout.addWidget(dl_widget)

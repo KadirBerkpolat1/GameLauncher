@@ -51,6 +51,7 @@ class SLSsteamConfigManager:
 
     def _get_default_structure(self) -> Dict[str, Any]:
         return {
+            "PlayNotOwnedGames": True,
             "DisableFamilyShareLock": True,
             "UseWhitelist": False,
             "AppIds": None,
@@ -121,3 +122,12 @@ class SLSsteamConfigManager:
             self.config_data["AppTokens"] = {}
         self.config_data["AppTokens"][app_id] = token
         self.save()
+
+    def ensure_play_not_owned_games(self, enabled: bool = True) -> bool:
+        """Ensures PlayNotOwnedGames is set to the requested value.
+        Returns True if a write was performed, False if already in the desired state."""
+        if self.config_data.get("PlayNotOwnedGames") == enabled:
+            return False
+        self.config_data["PlayNotOwnedGames"] = enabled
+        self.save()
+        return True

@@ -11,7 +11,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "steamgriddb_api_key": "",
     "steam_path": "",
     "slssteam_config_path": str(Path.home() / ".config" / "SLSsteam" / "config.yaml"),
-    "download_method": "steam",
+    "download_method": "ddmod",
     "depotdownloadermod_path": "",
     "downloads_folder": "",
     "auto_install": True,

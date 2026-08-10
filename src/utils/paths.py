@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -40,3 +41,31 @@ def get_slssteam_config_path() -> Path:
         return home / ".var" / "app" / "com.valvesoftware.Steam" / ".config" / "SLSsteam" / "config.yaml"
 
     return home / ".config" / "SLSsteam" / "config.yaml"
+
+
+def get_steam_libraries() -> list:
+    """
+    Returns a list of Steam library root paths (the directory that contains
+    the steamapps/ folder). Includes the main install path and any additional
+    libraries from libraryfolders.vdf.
+    """
+    steam_path = get_steam_path()
+    if not steam_path:
+        return []
+
+    all_libraries = {str(steam_path.resolve())}
+    vdf_path = steam_path / "steamapps" / "libraryfolders.vdf"
+
+    if vdf_path.exists():
+        try:
+            content = vdf_path.read_text(encoding="utf-8")
+            matches = re.findall(r'^\s*"path"\s*"(.*?)"', content, re.MULTILINE)
+            for path in matches:
+                normalized = path.replace("\\\\", "\\")
+                lib_path = Path(normalized)
+                if (lib_path / "steamapps").is_dir():
+                    all_libraries.add(str(lib_path.resolve()))
+        except OSError:
+            pass
+
+    return list(all_libraries)
