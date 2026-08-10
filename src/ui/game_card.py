@@ -207,9 +207,24 @@ class GameCard(QFrame):
 
     def _apply_fix_auto(self) -> None:
         from src.utils.onlinefix_patcher import OnlineFixPatcher
-        from PySide6.QtWidgets import QMessageBox
-        OnlineFixPatcher.apply_patch(self.app_id, self._installed_path)
-        QMessageBox.information(self, "Success", "OnlineFix applied successfully!")
+        from PySide6.QtWidgets import QMessageBox, QFileDialog
+        from pathlib import Path
+
+        target_path = getattr(self, '_installed_path', None)
+
+        # Eğer otomatik yol bulunamazsa veya geçerli değilse Manuel Seçime düş (Fallback)
+        if not target_path or not Path(target_path).exists():
+            default_dir = str(Path.home() / ".local/share/Steam/steamapps/common")
+            target_path = QFileDialog.getExistingDirectory(self, "Oyun Klasörünü Seçin (Otomatik Bulunamadı)", default_dir)
+
+        if not target_path:
+            return # Kullanıcı iptal etti
+
+        try:
+            OnlineFixPatcher.apply_patch(self.app_id, target_path)
+            QMessageBox.information(self, "Başarılı", f"OnlineFix başarıyla uygulandı!\n\nKlasör: {target_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Hata", f"Yama uygulanırken hata oluştu:\n{e}")
 
     def _uninstall_game(self) -> None:
         from PySide6.QtWidgets import QMessageBox

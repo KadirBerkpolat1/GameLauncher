@@ -147,8 +147,8 @@ class LibraryWidget(QWidget):
         try:
             manager = SLSsteamConfigManager()
             # Combine AppIds and AdditionalApps to show everything in the launcher library
-            app_ids = set(manager.config_data.get("AppIds", []) or [])
-            app_ids.update(manager.config_data.get("AdditionalApps", []) or [])
+            raw_app_ids = (manager.config_data.get("AppIds", []) or []) + (manager.config_data.get("AdditionalApps", []) or [])
+            app_ids = set(int(x) for x in raw_app_ids if x)
 
             if not app_ids:
                 self.empty_label.show()
