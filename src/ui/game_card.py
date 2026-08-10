@@ -91,7 +91,11 @@ class GameCard(QFrame):
             btn_layout.addWidget(self.btn_remove)
             btn_layout.addWidget(self.btn_commit)
         elif self.mode == "library":
-            self.btn_uninstall = QPushButton("Uninstall")
+            installed_path = get_installed_game_path(self.app_id)
+            self._installed_path = installed_path
+            
+            btn_text = "Uninstall" if installed_path else "Delete Lua"
+            self.btn_uninstall = QPushButton(btn_text)
             self.btn_uninstall.setProperty("cssClass", "SecondaryAction")
             self.btn_uninstall.setStyleSheet("background-color: #DA3633; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600;")
             self.btn_uninstall.clicked.connect(self._uninstall_game)
@@ -102,12 +106,10 @@ class GameCard(QFrame):
 
             btn_layout.addWidget(self.btn_uninstall)
             btn_layout.addWidget(self.btn_download)
-            installed_path = get_installed_game_path(self.app_id)
             if installed_path:
                 self.btn_apply_fix = QPushButton("Apply Fix")
                 self.btn_apply_fix.clicked.connect(self._apply_fix_auto)
                 btn_layout.addWidget(self.btn_apply_fix)
-            self._installed_path = installed_path
         layout.addLayout(btn_layout)
 
         # Network Manager for Image Downloading
@@ -210,25 +212,30 @@ class GameCard(QFrame):
         QMessageBox.information(self, "Success", "OnlineFix applied successfully!")
 
     def _uninstall_game(self) -> None:
-        from PySide6.QtWidgets import QMessageBox, QPushButton
+        from PySide6.QtWidgets import QMessageBox
 
-        box = QMessageBox(self)
-        box.setWindowTitle("Gelişmiş Kaldırma Seçenekleri")
-        box.setText(f"{self.title} için neleri kaldırmak istiyorsunuz?")
+        if getattr(self, '_installed_path', None):
+            box = QMessageBox(self)
+            box.setWindowTitle("Gelişmiş Kaldırma Seçenekleri")
+            box.setText(f"{self.title} için neleri kaldırmak istiyorsunuz?")
 
-        btn_both = box.addButton("Her İkisini Sil", QMessageBox.ButtonRole.AcceptRole)
-        btn_game = box.addButton("Sadece Oyun Dosyalarını Sil", QMessageBox.ButtonRole.AcceptRole)
-        btn_lua = box.addButton("Sadece Lua'yı (Kütüphaneden) Sil", QMessageBox.ButtonRole.AcceptRole)
-        btn_cancel = box.addButton("İptal", QMessageBox.ButtonRole.RejectRole)
+            btn_both = box.addButton("Her İkisini Sil", QMessageBox.ButtonRole.AcceptRole)
+            btn_game = box.addButton("Sadece Oyun Dosyalarını Sil", QMessageBox.ButtonRole.AcceptRole)
+            btn_cancel = box.addButton("İptal", QMessageBox.ButtonRole.RejectRole)
 
-        box.exec()
+            box.exec()
 
-        if box.clickedButton() == btn_cancel:
-            return
+            if box.clickedButton() == btn_cancel:
+                return
 
-        remove_files = box.clickedButton() in (btn_both, btn_game)
-        remove_lua = box.clickedButton() in (btn_both, btn_lua)
-
+            remove_files = box.clickedButton() in (btn_both, btn_game)
+            remove_lua = box.clickedButton() == btn_both
+        else:
+            confirm = QMessageBox.question(self, "Delete Lua", "Bu oyunu kütüphaneden (Lua) kaldırmak istediğinize emin misiniz?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if confirm != QMessageBox.StandardButton.Yes:
+                return
+            remove_files = False
+            remove_lua = True
         self.btn_uninstall.setEnabled(False)
         self.btn_uninstall.setText("Uninstalling...")
 
