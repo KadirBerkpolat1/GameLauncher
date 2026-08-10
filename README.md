@@ -24,7 +24,7 @@
 ## 🚀 Installation
 
 ### Prerequisites
-Make sure you have Python 3.10+ and `p7zip` installed on your system.
+Make sure you have Python 3.11+ and `p7zip` installed on your system.
 
 ```bash
 # Arch Linux
@@ -43,17 +43,18 @@ sudo apt install p7zip-full git python3 python3-venv
    ```
 
 2. **Run the installation script:**
-   This will automatically set up the virtual environment, install PySide6 dependencies, and create desktop shortcuts.
+   This will automatically set up the virtual environment, install dependencies,
+   and create a desktop shortcut. Re-running it upgrades an existing install.
    ```bash
    ./install.sh
    ```
 
 3. **Launch the application:**
-   You can run it via the newly created desktop shortcut, or manually from the terminal:
+   You can run it via the newly created desktop shortcut, or from the terminal:
    ```bash
-   source venv/bin/activate
-   python src/main.py
+   gamelauncher
    ```
+   *(If `~/.local/bin` is not in your PATH, the installer will show how to add it.)*
 
 ## ⚙️ Configuration (API Key)
 

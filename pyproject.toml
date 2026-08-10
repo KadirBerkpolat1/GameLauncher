@@ -17,3 +17,7 @@ dependencies = [
 
 [project.scripts]
 gamelauncher = "src.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+packages = ["src", "src.api", "src.config", "src.services", "src.ui", "src.utils"]
