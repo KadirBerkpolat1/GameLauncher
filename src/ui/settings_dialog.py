@@ -161,10 +161,18 @@ class SettingsDialog(QDialog):
         mode_group = QGroupBox("Tool Mode")
         mode_layout = QVBoxLayout()
         self.radio_std = QRadioButton("Standard download mode - lua goes to stplug-in")
-        self.radio_std.setChecked(not SettingsManager.get("steamtools_mode", False))
         self.radio_st = QRadioButton("SteamTools mode - downloads only .lua files")
-        self.radio_st.setChecked(SettingsManager.get("steamtools_mode", False))
         self.radio_dd = QRadioButton("DepotDownloader mode")
+        
+        dl_method = SettingsManager.get("download_method", "steam")
+        st_mode = SettingsManager.get("steamtools_mode", False)
+        
+        if dl_method == "ddmod":
+            self.radio_dd.setChecked(True)
+        elif st_mode:
+            self.radio_st.setChecked(True)
+        else:
+            self.radio_std.setChecked(True)
         
         mode_layout.addWidget(self.radio_std)
         mode_layout.addWidget(self.radio_st)
