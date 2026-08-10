@@ -8,10 +8,20 @@ SETTINGS_FILE = SETTINGS_DIR / "settings.json"
 
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "hubcap_api_key": "",
+    "steamgriddb_api_key": "",
     "steam_path": "",
     "slssteam_config_path": str(Path.home() / ".config" / "SLSsteam" / "config.yaml"),
     "download_method": "steam",
     "depotdownloadermod_path": "",
+    "downloads_folder": "",
+    "auto_install": True,
+    "delete_zip": False,
+    "disable_os_filter": False,
+    "steamtools_mode": False,
+    "auto_upload_keys": True,
+    "steam_username": "",
+    "steam_password": "",
+    "download_history": [],
     "theme": "dark",
     "profiles": {
         "default": {

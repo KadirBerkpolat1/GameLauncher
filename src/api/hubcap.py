@@ -121,15 +121,21 @@ class HubcapClient:
         self._cache[cache_key] = data
         return data
 
-    async def get_app_manifest_zip(self, app_id: int, branch: str = "public") -> bytes:
+    async def get_app_manifest_zip(self, app_id: int, force_update: bool = False, content: str = "") -> bytes:
         """
         Download a game manifest ZIP file. Counts toward daily usage limit.
+        Query params: force_update (bool) triggers a manifest refresh before serving,
+        content (str) is an optional alternate content selector.
         """
         client = self._get_client()
-        params = {"branch": branch}
-            
+        params = {}
+        if force_update:
+            params["force_update"] = "true"
+        if content:
+            params["content"] = content
+
         try:
-            response = await client.get(f"/generate/appmanifest/{app_id}", params=params, timeout=60.0)
+            response = await client.get(f"/manifest/{app_id}", params=params, timeout=60.0)
             response.raise_for_status()
             return response.content
         except httpx.HTTPStatusError as e:

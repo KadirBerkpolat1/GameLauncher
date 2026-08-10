@@ -1,13 +1,17 @@
-import asyncio
+from pathlib import Path
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QScrollArea, QPushButton, QLineEdit, QComboBox)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from src.config.slssteam import SLSsteamConfigManager
 from src.ui.game_card import GameCard
 from src.api.hubcap import hubcap_api
 from src.ui.flow_layout import FlowLayout
+from src.utils.async_utils import get_async_loop
 
 class LibraryWidget(QWidget):
+    download_requested = Signal(int, str)
+    restart_steam_requested = Signal()
+
     def __init__(self) -> None:
         super().__init__()
         self.init_ui()
@@ -33,12 +37,15 @@ class LibraryWidget(QWidget):
         self.btn_refresh = QPushButton("Refresh")
         self.btn_refresh.clicked.connect(self.load_library)
         self.btn_refresh_cache = QPushButton("Refresh Cache")
+        self.btn_refresh_cache.clicked.connect(self._refresh_cache)
         self.btn_toggle_updates = QPushButton("Toggle Updates")
+        self.btn_toggle_updates.clicked.connect(self._toggle_updates)
         self.btn_export_luas = QPushButton("Export Luas")
+        self.btn_export_luas.clicked.connect(self._export_luas)
         self.btn_restart_steam = QPushButton("Restart Steam")
         self.btn_restart_steam.setProperty("cssClass", "PrimaryAction")
-        # restart steam is usually connected to main_window, we can leave the signal disconnected or connect it later
-        
+        self.btn_restart_steam.clicked.connect(self.restart_steam_requested.emit)
+
         action_bar.addWidget(self.btn_refresh)
         action_bar.addWidget(self.btn_refresh_cache)
         action_bar.addWidget(self.btn_toggle_updates)
@@ -95,6 +102,44 @@ class LibraryWidget(QWidget):
             if item.widget() and item.widget() != self.empty_label:
                 item.widget().deleteLater()
 
+    def _refresh_cache(self) -> None:
+        hubcap_api.clear_cache()
+        self.load_library()
+
+    def _toggle_updates(self) -> None:
+        try:
+            manager = SLSsteamConfigManager()
+            manager.config_data["DisableUpdates"] = not bool(manager.config_data.get("DisableUpdates", True))
+            manager.save()
+            state = "OFF" if manager.config_data["DisableUpdates"] else "ON"
+            self.btn_toggle_updates.setText(f"Updates: {state}")
+        except Exception as e:
+            print(f"Error toggling updates: {e}")
+
+    def _export_luas(self) -> None:
+        import shutil
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        from src.utils.paths import get_steam_path
+        steam_path = get_steam_path()
+        if not steam_path:
+            QMessageBox.warning(self, "Error", "Steam path not configured. Set it in Settings first.")
+            return
+        plugin_dir = steam_path / "config" / "stplug-in"
+        if not plugin_dir.exists() or not list(plugin_dir.glob("*.lua")):
+            QMessageBox.information(self, "No Lua Files", "No Lua files found to export.")
+            return
+        dest = QFileDialog.getExistingDirectory(self, "Select export folder")
+        if not dest:
+            return
+        count = 0
+        for f in plugin_dir.glob("*.lua"):
+            try:
+                shutil.copy2(f, Path(dest) / f.name)
+                count += 1
+            except Exception as e:
+                print(f"Failed to export {f.name}: {e}")
+        QMessageBox.information(self, "Export Complete", f"Exported {count} Lua file(s) to {dest}")
+
     def load_library(self) -> None:
         """Reads the SLSsteam config and populates the library view."""
         self._clear_grid()
@@ -110,12 +155,23 @@ class LibraryWidget(QWidget):
                 return
 
             self.empty_label.hide()
-            
-            # Mock stats calculation based on app count
-            self.lbl_stats.setText(f"{len(app_ids)} Lua, {len(app_ids)} Steam, {len(app_ids)*4.2:.1f} GB Size")
+
+            # Real stats: count Lua files on disk and compute their total size
+            from src.utils.paths import get_steam_path
+            steam_path = get_steam_path()
+            lua_count = 0
+            lua_size = 0
+            if steam_path:
+                plugin_dir = steam_path / "config" / "stplug-in"
+                if plugin_dir.exists():
+                    lua_files = list(plugin_dir.glob("*.lua"))
+                    lua_count = len(lua_files)
+                    lua_size = sum(f.stat().st_size for f in lua_files if f.is_file())
+            size_gb = lua_size / (1024 ** 3)
+            self.lbl_stats.setText(f"{lua_count} Lua, {len(app_ids)} Steam, {size_gb:.2f} GB Size")
 
             # Fetch game details asynchronously
-            loop = asyncio.get_event_loop()
+            loop = get_async_loop()
             loop.create_task(self._fetch_and_display_library(list(app_ids)))
 
         except Exception as e:
@@ -141,4 +197,5 @@ class LibraryWidget(QWidget):
                     print(f"Error fetching name for {app_id}: {e}")
 
                 card = GameCard(app_id, title, image_url, mode="library")
+                card.download_requested.connect(self.download_requested.emit)
                 self.grid_layout.addWidget(card)

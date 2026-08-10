@@ -4,6 +4,7 @@ from src.ui.game_card import GameCard
 from src.ui.active_download_widget import ActiveDownloadWidget
 from src.ui.flow_layout import FlowLayout
 from src.config.settings import SettingsManager
+from src.utils.async_utils import get_async_loop
 
 class DownloadsWidget(QWidget):
     """
@@ -21,7 +22,7 @@ class DownloadsWidget(QWidget):
 
         # --- Header ---
         header_layout = QVBoxLayout()
-        header = QLabel("Downloads & History")
+        header = QLabel("Active Downloads")
         header.setStyleSheet("font-size: 24px; font-weight: bold; color: #FFFFFF;")
         
         # Status Indicator
@@ -36,36 +37,15 @@ class DownloadsWidget(QWidget):
         action_bar = QWidget()
         action_layout = QHBoxLayout(action_bar)
         action_layout.setContentsMargins(0, 0, 0, 0)
-        from PySide6.QtWidgets import QComboBox
-        self.combo_scope = QComboBox()
-        self.combo_scope.addItems(["Full Game (Base + DLCs)", "Base Game Only", "DLCs Only"])
-        self.combo_scope.setStyleSheet("""
-            QComboBox {
-                background-color: #21262D;
-                color: #C9D1D9;
-                border: 1px solid #30363D;
-                border-radius: 6px;
-                padding: 6px 12px;
-            }
-        """)
+        # Removed combo_scope to use per-game DepotSelectionDialog
 
-        self.btn_download_all = QPushButton("Install All Queued")
-        self.btn_download_all.setProperty("cssClass", "PrimaryAction")
-        self.btn_download_all.clicked.connect(self._process_queue)
-        
         self.btn_clear_history = QPushButton("Clear History")
         self.btn_clear_history.setProperty("cssClass", "SecondaryAction")
-        # self.btn_clear_history.clicked.connect(self._clear_history)
-        action_layout.addWidget(self.btn_download_all)
-        action_layout.addWidget(self.combo_scope)
+        self.btn_clear_history.clicked.connect(self._clear_history)
         action_layout.addStretch()
         action_layout.addWidget(self.btn_clear_history)
         layout.addWidget(action_bar)
 
-        # --- Active Downloads Area ---
-        active_lbl = QLabel("Active Downloads")
-        active_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #DDDDDD;")
-        layout.addWidget(active_lbl)
         
         self.active_downloads_container = QWidget()
         self.active_downloads_layout = QVBoxLayout(self.active_downloads_container)
@@ -79,29 +59,6 @@ class DownloadsWidget(QWidget):
         self.active_scroll.setWidget(self.active_downloads_container)
         self.active_scroll.hide() # Hide initially
         layout.addWidget(self.active_scroll)
-
-        # --- Grid Area (Queue) ---
-        queue_lbl = QLabel("Queued For Installation")
-        queue_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #DDDDDD;")
-        layout.addWidget(queue_lbl)
-
-        # Grid Area
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
-        self.scroll_area.setStyleSheet("background-color: transparent;")
-
-        self.grid_container = QWidget()
-        self.grid_container.setStyleSheet("background-color: transparent;")
-        self.grid_layout = FlowLayout(self.grid_container, spacing=20)
-
-        self.empty_label = QLabel("Queue is empty. Add games from the Search tab.")
-        self.empty_label.setStyleSheet("color: #777777; font-size: 16px;")
-        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.grid_layout.addWidget(self.empty_label)
-
-        self.scroll_area.setWidget(self.grid_container)
-        layout.addWidget(self.scroll_area)
 
         # --- History Area ---
         history_lbl = QLabel("Download History")
@@ -117,112 +74,161 @@ class DownloadsWidget(QWidget):
         self.history_container = QWidget()
         self.history_layout = QVBoxLayout(self.history_container)
         self.history_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        
-        # Mock History Item
-        mock_item = QLabel("✓ Cyberpunk 2077 - Download completed and added to library (Yesterday)")
-        mock_item.setStyleSheet("color: #888888;")
-        self.history_layout.addWidget(mock_item)
 
         self.history_scroll.setWidget(self.history_container)
         layout.addWidget(self.history_scroll)
 
-    def _clear_grid(self) -> None:
-        for i in reversed(range(self.grid_layout.count())):
-            item = self.grid_layout.itemAt(i)
-            if item.widget() and item.widget() != self.empty_label:
-                item.widget().deleteLater()
+        self._load_history()
 
-    def load_queue(self) -> None:
-        """Reads the queued downloads from SettingsManager."""
-        self._clear_grid()
-        queued = SettingsManager.get("download_queue", [])
-
-        if not queued:
-            self.empty_label.show()
-            self.btn_download_all.hide()
+    def _load_history(self) -> None:
+        from src.config.settings import SettingsManager
+        history = SettingsManager.get("download_history", []) or []
+        for i in reversed(range(self.history_layout.count())):
+            item = self.history_layout.itemAt(i)
+            w = item.widget()
+            if w:
+                self.history_layout.removeWidget(w)
+                w.deleteLater()
+        if not history:
+            empty = QLabel("No downloads yet.")
+            empty.setStyleSheet("color: #888888;")
+            self.history_layout.addWidget(empty)
             return
+        for entry in reversed(history[-20:]):
+            status = entry.get("status", "Completed")
+            icon = "✓" if status == "Completed" else "✗"
+            item = QLabel(f"{icon} {entry.get('title', '')} - {status} ({entry.get('date', '')})")
+            item.setStyleSheet("color: #888888;")
+            self.history_layout.addWidget(item)
 
-        self.empty_label.hide()
-        self.btn_download_all.show()
+    def _clear_history(self) -> None:
+        from src.config.settings import SettingsManager
+        SettingsManager.set("download_history", [])
+        self._load_history()
 
-        for game in queued:
-            app_id = game.get("app_id", 0)
-            title = game.get("title", f"App {app_id}")
-            image_url = game.get("image_url", "")
+    @staticmethod
+    def _record_history(app_id: int, title: str, status: str, size: str = "") -> None:
+        from src.config.settings import SettingsManager
+        from datetime import datetime
+        history = SettingsManager.get("download_history", []) or []
+        history.append({
+            "app_id": app_id,
+            "title": title,
+            "size": size,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "status": status,
+        })
+        SettingsManager.set("download_history", history)
 
-            # Use 'queued' mode to show remove button or status
-            card = GameCard(app_id, title, image_url, mode="queued")
-            self.grid_layout.addWidget(card)
+    def start_download(self, app_id: int, title: str) -> None:
+        """Starts a download process for a specific game."""
+        loop = get_async_loop()
+        loop.create_task(self._async_start_download(app_id, title))
 
-    def _process_queue(self) -> None:
-        """Moves all queued games to SLSsteam config, fetches keys, and triggers Steam install."""
-        queued = SettingsManager.get("download_queue", [])
-        if not queued:
-            return
-
-        self.btn_download_all.setText("Processing...")
-        self.btn_download_all.setEnabled(False)
-        import asyncio
-        loop = asyncio.get_event_loop()
-        loop.create_task(self._async_process_queue(queued))
-
-    async def _async_process_queue(self, queued: list) -> None:
+    async def _async_start_download(self, app_id: int, title: str) -> None:
         try:
             from src.services.download import DownloadManager
             download_method = SettingsManager.get("download_method", "steam")
             
-            scope_idx = self.combo_scope.currentIndex()
-            scope = "full"
-            if scope_idx == 1:
-                scope = "basegame"
-            elif scope_idx == 2:
-                scope = "dlc"
+            try:
+                # Extracts manifests for full game to parse Lua
+                depots = await DownloadManager.prepare_game_data(app_id, scope="full")
                 
-            if download_method != "ddmod" and scope != "full":
-                print("Warning: Scoped downloads (Base/DLC) require DDMod. Defaulting to Full Game for Steam protocol.")
-                scope = "full"
+                if download_method == "ddmod":
+                    # --- Erken DDMod yolu kontrolü ---
+                    from pathlib import Path
+                    ddmod_path_str = SettingsManager.get("depotdownloadermod_path", "")
+                    if not ddmod_path_str or not Path(ddmod_path_str).exists():
+                        from PySide6.QtWidgets import QMessageBox
+                        QMessageBox.critical(
+                            self,
+                            "DDMod Kurulu Değil",
+                            "DepotDownloaderMod yolu bulunamadı.\n\n"
+                            "Lütfen Settings → Advanced Tools bölümüne gidip DDMod'u kurun."
+                        )
+                        return
 
-            remaining_queue = list(queued)
+                    # Pause and ask for user selection using MetadataFetcher
+                    from src.services.metadata import MetadataFetcher
+                    from src.ui.depot_selection_dialog import DepotSelectionDialog
+                    import asyncio
 
-            for game in queued:
-                app_id = game.get("app_id")
-                title = game.get("title", f"App {app_id}")
-                
-                # Remove from visual queue
-                remaining_queue.remove(game)
-                SettingsManager.set("download_queue", remaining_queue)
-                self.load_queue()
-                
-                try:
-                    # Extracts manifests if 'full' scope, otherwise gets specific LUA
-                    depots = await DownloadManager.prepare_game_data(app_id, scope=scope)
-                    if download_method == "ddmod":
-                        self.active_scroll.show()
-                        dl_widget = ActiveDownloadWidget(app_id, title)
-                        has_error = False
-                        for depot in depots:
-                            depot_id = depot.get("depot_id")
-                            man_id = depot.get("manifest_id")
-                            if depot_id and man_id:
-                                try:
-                                    async for progress in DownloadManager.install_via_ddmod(app_id, depot_id, man_id):
-                                        dl_widget.update_progress(progress)
-                                except Exception as e:
-                                    has_error = True
-                                    dl_widget.mark_error(str(e))
-                                    print(f"DDMod Error for depot {depot_id}: {e}")
-                        if not has_error:
+                    hubcap_depot_ids = [d.get("depot_id") for d in depots if d.get("depot_id")]
+                    metadata = await MetadataFetcher.fetch_depot_metadata(app_id, hubcap_depot_ids)
+
+                    future = asyncio.Future()
+                    dialog = DepotSelectionDialog(title, metadata, self)
+
+                    def on_accept():
+                        if not future.done():
+                            future.set_result(dialog.get_selected_depots())
+
+                    def on_reject():
+                        if not future.done():
+                            future.set_result(None)
+
+                    dialog.accepted.connect(on_accept)
+                    dialog.rejected.connect(on_reject)
+                    dialog.open()
+
+                    selected_depot_ids = await future
+                    dialog.deleteLater()
+
+                    if selected_depot_ids is None:
+                        print(f"User canceled installation for {app_id}")
+                        return
+
+                    # Depot'ların manifest_id kontrolü
+                    selected_depots = [d for d in depots if d.get("depot_id") in selected_depot_ids]
+                    valid_depots = [d for d in selected_depots if d.get("manifest_id")]
+                    if not valid_depots:
+                        from PySide6.QtWidgets import QMessageBox
+                        QMessageBox.warning(
+                            self, "İndirme Hatası",
+                            f"{title} için geçerli depot/manifest verisi bulunamadı.\n"
+                            "Hubcap bu oyun için indirme bilgisi sunmuyor olabilir."
+                        )
+                        return
+
+                    from src.services.download_task import DownloadTask
+
+                    task = DownloadTask(app_id, title, valid_depots)
+                    dl_widget = ActiveDownloadWidget(task)
+
+                    self.active_downloads_layout.addWidget(dl_widget)
+                    self.active_scroll.show()
+
+                    has_error = False
+
+                    def progress_cb(line):
+                        dl_widget.update_progress(line)
+
+                    def error_cb(err_msg):
+                        nonlocal has_error
+                        has_error = True
+                        dl_widget.mark_error(err_msg)
+                        self._record_history(app_id, title, "Failed")
+                        self._load_history()
+                        print(f"DDMod Error for {app_id}: {err_msg}")
+
+                    def complete_cb():
+                        if not task.is_canceled and not has_error:
                             dl_widget.mark_complete()
-                    else:
-                        # Fallback to Steam protocol
-                        DownloadManager.install_via_steam(app_id)
+                            self._record_history(app_id, title, "Completed")
+                            self._load_history()
 
-                except Exception as e:
-                    print(f"Warning: Failed to prepare game data for {app_id}: {e}")
+                    await task.run(progress_callback=progress_cb, error_callback=error_cb, complete_callback=complete_cb)
 
-            self.btn_download_all.setText("Download All")
-            self.btn_download_all.setEnabled(True)
+                    if task.is_canceled:
+                        self._record_history(app_id, title, "Canceled")
+                        self._load_history()
+                        print(f"Task for {app_id} was canceled.")
+                else:
+                    # Fallback to Steam protocol
+                    DownloadManager.install_via_steam(app_id)
+
+            except Exception as e:
+                print(f"Warning: Failed to prepare game data for {app_id}: {e}")
+
         except Exception as e:
-            self.btn_download_all.setText("Error")
-            self.btn_download_all.setEnabled(True)
-            print(f"Error processing download queue: {e}")
+            print(f"Error processing download: {e}")

@@ -1,12 +1,12 @@
-import asyncio
 from src.config.settings import SettingsManager
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, 
                                QScrollArea, QLabel, QPushButton, QCheckBox, 
                                QComboBox, QSpinBox)
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QUrl
 from src.api.hubcap import hubcap_api
 from src.ui.game_card import GameCard
 from src.ui.flow_layout import FlowLayout
+from src.utils.async_utils import get_async_loop
 
 class SearchWidget(QWidget):
     def __init__(self) -> None:
@@ -14,6 +14,10 @@ class SearchWidget(QWidget):
         self.current_page = 1
         self.total_pages = 1
         self.limit = 50
+        self.list_mode = False
+        self.select_mode = False
+        self.current_results: list = []
+        self._list_checkboxes = {}
         self.init_ui()
         self.search_timer = QTimer()
         self.search_timer.setSingleShot(True)
@@ -39,6 +43,7 @@ class SearchWidget(QWidget):
         self.btn_search.setProperty("cssClass", "PrimaryAction")
         self.btn_search.clicked.connect(self._perform_search)
         top_bar.addWidget(self.search_input)
+        self.cb_appid.toggled.connect(lambda: self._perform_search() if self.search_input.text().strip() else None)
         top_bar.addWidget(self.cb_appid)
         top_bar.addWidget(self.btn_search)
         layout.addLayout(top_bar)
@@ -46,14 +51,29 @@ class SearchWidget(QWidget):
         # --- Filters Bar ---
         filters_bar = QHBoxLayout()
         self.combo_sort = QComboBox()
-        self.combo_sort.addItems(["Sort: Newest First", "Sort: Name (A-Z)", "Sort: AppID"])
+        self.combo_sort.addItems(["Sort: Newest First", "Sort: Name (A-Z)"])
+        self.combo_sort.currentIndexChanged.connect(self._load_library)
+        
+        # Hubcap API doesn't support these filters server-side yet
         self.cb_adult = QCheckBox("Show adult games")
+        self.cb_adult.setEnabled(False)
+        self.cb_adult.setToolTip("Not supported by current Hubcap API version")
         
         self.cb_games = QCheckBox("Games")
         self.cb_games.setChecked(True)
+        self.cb_games.setEnabled(False)
+        
         self.cb_dlc = QCheckBox("DLC")
+        self.cb_dlc.setEnabled(False)
+        self.cb_dlc.setToolTip("Not supported by current Hubcap API version")
+        
         self.cb_music = QCheckBox("Music")
+        self.cb_music.setEnabled(False)
+        self.cb_music.setToolTip("Not supported by current Hubcap API version")
+        
         self.cb_apps = QCheckBox("Apps")
+        self.cb_apps.setEnabled(False)
+        self.cb_apps.setToolTip("Not supported by current Hubcap API version")
 
         filters_bar.addWidget(self.combo_sort)
         filters_bar.addWidget(self.cb_adult)
@@ -69,7 +89,9 @@ class SearchWidget(QWidget):
         self.btn_load = QPushButton("Load")
         self.btn_load.clicked.connect(self._load_library)
         self.btn_select_mode = QPushButton("Select Mode")
+        self.btn_select_mode.clicked.connect(self._toggle_select_mode)
         self.btn_list_view = QPushButton("List View")
+        self.btn_list_view.clicked.connect(self._toggle_list_view)
         
         filters_bar.addWidget(self.btn_load)
         filters_bar.addWidget(self.btn_select_mode)
@@ -147,7 +169,7 @@ class SearchWidget(QWidget):
             return
             
         is_appid = self.cb_appid.isChecked()
-        loop = asyncio.get_event_loop()
+        loop = get_async_loop()
         loop.create_task(self._fetch_search(query, is_appid))
 
     async def _fetch_search(self, query: str, is_appid: bool) -> None:
@@ -161,7 +183,7 @@ class SearchWidget(QWidget):
             self.status_label.show()
 
     def _load_library(self) -> None:
-        loop = asyncio.get_event_loop()
+        loop = get_async_loop()
         loop.create_task(self._fetch_library())
 
     async def _fetch_library(self) -> None:
@@ -209,8 +231,7 @@ class SearchWidget(QWidget):
 
     def _display_results(self, results: list) -> None:
         self._clear_results()
-        # Clear the old mock pagination
-        pass
+        self.current_results = results
         if not results:
             self.status_label.setText("No games found.")
             self.status_label.show()
@@ -222,13 +243,127 @@ class SearchWidget(QWidget):
         query = self.search_input.text().strip().lower()
         results = sorted(results, key=lambda g: 0 if g.get("game_name", "").lower() == query else 1)
 
-        for game in results:
-            # Parse the exact keys provided by HubcapManifest API
-            raw_id = game.get("game_id", "0")
-            app_id = int(raw_id) if str(raw_id).isdigit() else 0
-            title = game.get("game_name", "Unknown Game")
+        self._list_checkboxes = {}
+        if self.list_mode:
+            for game in results:
+                row = self._create_list_row(game)
+                self.results_layout.addWidget(row)
+        else:
+            for game in results:
+                # Parse the exact keys provided by HubcapManifest API
+                raw_id = game.get("game_id", "0")
+                app_id = int(raw_id) if str(raw_id).isdigit() else 0
+                title = game.get("game_name", "Unknown Game")
 
+                image_url = game.get("header_image", "")
+                card = GameCard(app_id, title, image_url, mode="store")
+                self.results_layout.addWidget(card)
 
-            image_url = game.get("header_image", "")
-            card = GameCard(app_id, title, image_url, mode="store")
-            self.results_layout.addWidget(card)
+    def _create_list_row(self, game: dict) -> QWidget:
+        from PySide6.QtWidgets import QFrame, QCheckBox
+        raw_id = game.get("game_id", "0")
+        app_id = int(raw_id) if str(raw_id).isdigit() else 0
+        title = game.get("game_name", "Unknown Game")
+        image_url = game.get("header_image", "")
+
+        row = QFrame()
+        row.setObjectName("SearchListRow")
+        row.setStyleSheet("""
+            #SearchListRow { background-color: #161B22; border: 1px solid #30363D; border-radius: 8px; }
+            #SearchListRow:hover { background-color: #21262D; border-color: #58A6FF; }
+        """)
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(10, 8, 10, 8)
+        row_layout.setSpacing(12)
+
+        thumb = QLabel()
+        thumb.setFixedSize(200, 113)
+        thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        thumb.setStyleSheet("background-color: #1B2027; border-radius: 4px; color: #8B949E; font-size: 10px;")
+        thumb.setText("Loading...")
+        row_layout.addWidget(thumb)
+
+        title_label = QLabel(title)
+        title_label.setWordWrap(True)
+        title_label.setStyleSheet("font-weight: bold; color: #FFFFFF; font-size: 15px;")
+        row_layout.addWidget(title_label, 1)
+
+        if self.select_mode:
+            cb = QCheckBox("Select")
+            self._list_checkboxes[app_id] = cb
+            row_layout.addWidget(cb)
+
+        add_btn = QPushButton("Add to Library")
+        add_btn.setProperty("cssClass", "PrimaryAction")
+        add_btn.clicked.connect(lambda: self._add_to_library(app_id, add_btn))
+        row_layout.addWidget(add_btn)
+
+        if app_id and image_url:
+            self._fetch_row_thumbnail(thumb, image_url, app_id)
+        else:
+            thumb.setText("No Image")
+        return row
+
+    def _fetch_row_thumbnail(self, label: QLabel, image_url: str, app_id: int) -> None:
+        from PySide6.QtGui import QPixmap, QImage
+        from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+        if not hasattr(self, "_thumb_manager"):
+            self._thumb_manager = QNetworkAccessManager(self)
+        manager = self._thumb_manager
+
+        def on_loaded(reply: QNetworkReply):
+            try:
+                if reply.error() == QNetworkReply.NetworkError.NoError:
+                    img = QImage()
+                    img.loadFromData(reply.readAll())
+                    pixmap = QPixmap(img).scaled(
+                        200, 113,
+                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    label.setPixmap(pixmap)
+                    label.setText("")
+                else:
+                    label.setText("No Image")
+            except Exception:
+                label.setText("No Image")
+            finally:
+                reply.deleteLater()
+
+        urls = [image_url] if image_url else []
+        urls += [
+            f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{app_id}/header.jpg",
+        ]
+        req = QNetworkRequest(QUrl(urls[0]))
+        reply = manager.get(req)
+        reply.finished.connect(lambda r=reply: on_loaded(r))
+
+    def _add_to_library(self, app_id: int, btn: QPushButton) -> None:
+        btn.setText("Adding...")
+        btn.setEnabled(False)
+        loop = get_async_loop()
+        loop.create_task(self._async_add(app_id, btn))
+
+    async def _async_add(self, app_id: int, btn: QPushButton) -> None:
+        try:
+            from src.services.download import DownloadManager
+            await DownloadManager.prepare_game_data(app_id, scope="full")
+            btn.setText("Added")
+        except Exception as e:
+            btn.setText("Error")
+            btn.setEnabled(True)
+            print(f"Error adding {app_id}: {e}")
+
+    def _toggle_list_view(self) -> None:
+        self.list_mode = not self.list_mode
+        self.btn_list_view.setText("Grid View" if self.list_mode else "List View")
+        if self.current_results:
+            self._display_results(self.current_results)
+
+    def _toggle_select_mode(self) -> None:
+        self.select_mode = not self.select_mode
+        self.btn_select_mode.setText("Done" if self.select_mode else "Select Mode")
+        if not self.select_mode:
+            self._list_checkboxes = {}
+        if self.current_results:
+            self._display_results(self.current_results)

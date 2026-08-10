@@ -1,5 +1,4 @@
 import os
-import asyncio
 from pathlib import Path
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit, 
                                QPushButton, QLabel, QHBoxLayout, QCheckBox, 
@@ -10,6 +9,7 @@ from src.config.settings import SettingsManager
 from src.utils.paths import get_steam_path
 from src.api.hubcap import hubcap_api
 from src.services.installer import SLSsteamInstaller, DDModInstaller
+from src.utils.async_utils import get_async_loop
 class SettingsDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -97,6 +97,7 @@ class SettingsDialog(QDialog):
         save_btn = QPushButton("Save")
         save_btn.setProperty("cssClass", "PrimaryAction")
         save_btn.clicked.connect(self._save_settings)
+        save_btn.setDefault(True)
 
         btn_layout.addWidget(cancel_btn)
         btn_layout.addWidget(save_btn)
@@ -145,6 +146,7 @@ class SettingsDialog(QDialog):
         validate_btn = QPushButton("Validate")
         validate_btn.setProperty("cssClass", "SecondaryAction")
         validate_btn.clicked.connect(self._validate_api_key)
+        validate_btn.setAutoDefault(False)
         
         api_input_layout.addWidget(self.api_key_input)
         api_input_layout.addWidget(validate_btn)
@@ -235,9 +237,33 @@ class SettingsDialog(QDialog):
         
         self.cb_os_filter = QCheckBox("Disable depot OS filtering")
         self.cb_os_filter.setChecked(SettingsManager.get("disable_os_filter", False))
-        
+
         sd_layout.addRow(self.cb_auto_install)
         sd_layout.addRow(self.cb_delete_zip)
+        sd_layout.addRow(self.cb_os_filter)
+
+        # Steam credentials for DDMod (ücretli oyunlar için)
+        creds_group = QGroupBox("Steam Hesabı (DDMod için gerekli)")
+        creds_group.setStyleSheet("QGroupBox { border: 1px solid #333; border-radius: 6px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px; }")
+        creds_layout = QFormLayout(creds_group)
+
+        self.steam_username_input = QLineEdit()
+        self.steam_username_input.setText(SettingsManager.get("steam_username", ""))
+        self.steam_username_input.setPlaceholderText("Steam kullanıcı adınız")
+        creds_layout.addRow(QLabel("Kullanıcı Adı:"), self.steam_username_input)
+
+        self.steam_password_input = QLineEdit()
+        self.steam_password_input.setText(SettingsManager.get("steam_password", ""))
+        self.steam_password_input.setPlaceholderText("Steam şifreniz")
+        self.steam_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        creds_layout.addRow(QLabel("Şifre:"), self.steam_password_input)
+
+        note = QLabel("⚠ Şifre yerel olarak şifresiz saklanır. Sadece ücretli oyunlar için gereklidir.")
+        note.setStyleSheet("color: #8B949E; font-size: 11px;")
+        note.setWordWrap(True)
+        creds_layout.addRow(note)
+
+        sd_layout.addRow(creds_group)
     def _browse_steam_path(self) -> None:
         dir_path = QFileDialog.getExistingDirectory(self, "Select Steam Directory")
         if dir_path:
@@ -334,7 +360,7 @@ class SettingsDialog(QDialog):
     def _install_slssteam(self) -> None:
         self.btn_install_sls.setText("Installing...")
         self.btn_install_sls.setEnabled(False)
-        loop = asyncio.get_event_loop()
+        loop = get_async_loop()
         loop.create_task(self._run_sls_installer())
 
     async def _run_sls_installer(self) -> None:
@@ -350,7 +376,7 @@ class SettingsDialog(QDialog):
     def _uninstall_slssteam(self) -> None:
         self.btn_uninstall_sls.setText("Uninstalling...")
         self.btn_uninstall_sls.setEnabled(False)
-        loop = asyncio.get_event_loop()
+        loop = get_async_loop()
         loop.create_task(self._run_sls_uninstaller())
 
     async def _run_sls_uninstaller(self) -> None:
@@ -366,7 +392,7 @@ class SettingsDialog(QDialog):
     def _install_ddmod(self) -> None:
         self.btn_install_ddmod.setText("Installing...")
         self.btn_install_ddmod.setEnabled(False)
-        loop = asyncio.get_event_loop()
+        loop = get_async_loop()
         loop.create_task(self._run_ddmod_installer())
 
     async def _run_ddmod_installer(self) -> None:
@@ -382,7 +408,7 @@ class SettingsDialog(QDialog):
     def _uninstall_ddmod(self) -> None:
         self.btn_uninstall_ddmod.setText("Uninstalling...")
         self.btn_uninstall_ddmod.setEnabled(False)
-        loop = asyncio.get_event_loop()
+        loop = get_async_loop()
         loop.create_task(self._run_ddmod_uninstaller())
 
     async def _run_ddmod_uninstaller(self) -> None:
@@ -394,8 +420,7 @@ class SettingsDialog(QDialog):
         finally:
             self.btn_uninstall_ddmod.setText("Uninstall")
             self.btn_uninstall_ddmod.setEnabled(True)
-        sd_layout.addRow(self.cb_os_filter)
-        
+
     def _validate_api_key(self) -> None:
         key = self.api_key_input.text().strip()
         if not key.startswith("smm_"):
@@ -418,7 +443,7 @@ class SettingsDialog(QDialog):
                 hubcap_api._client = None
                 QMessageBox.critical(self, "Validation Failed", f"Could not validate API Key:\n{e}")
 
-        asyncio.get_event_loop().create_task(run_validation())
+        get_async_loop().create_task(run_validation())
 
     def _save_settings(self) -> None:
         SettingsManager.set("hubcap_api_key", self.api_key_input.text().strip())
@@ -430,6 +455,8 @@ class SettingsDialog(QDialog):
         SettingsManager.set("auto_install", self.cb_auto_install.isChecked())
         SettingsManager.set("delete_zip", self.cb_delete_zip.isChecked())
         SettingsManager.set("disable_os_filter", self.cb_os_filter.isChecked())
+        SettingsManager.set("steam_username", self.steam_username_input.text().strip())
+        SettingsManager.set("steam_password", self.steam_password_input.text())
         
         # DepotDownloader mode check
         if self.radio_dd.isChecked():

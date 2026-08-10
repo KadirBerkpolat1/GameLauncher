@@ -2,7 +2,7 @@
   <h1>🎮 GameLauncher (Linux)</h1>
   <p><b>A modern, standalone Steam Game and DLC Manager for Linux.</b></p>
   
-  [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+  [![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
   [![PySide6](https://img.shields.io/badge/UI-PySide6-green.svg)](https://wiki.qt.io/Qt_for_Python)
   [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 </div>

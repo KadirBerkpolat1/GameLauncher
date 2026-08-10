@@ -1,5 +1,5 @@
 import re
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QProgressBar, QFrame
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QProgressBar, QFrame, QPushButton
 from PySide6.QtCore import Qt
 
 class ActiveDownloadWidget(QFrame):
@@ -7,10 +7,11 @@ class ActiveDownloadWidget(QFrame):
     Displays the progress, speed, and status of an active download.
     Parses DepotDownloader stdout to update the UI.
     """
-    def __init__(self, app_id: int, title: str = "Unknown Game", parent=None):
+    def __init__(self, task, parent=None):
         super().__init__(parent)
-        self.app_id = app_id
-        self.title = title
+        self.task = task
+        self.app_id = task.app_id
+        self.title = task.title
         self.init_ui()
 
     def init_ui(self):
@@ -73,12 +74,57 @@ class ActiveDownloadWidget(QFrame):
         
         main_layout.addLayout(progress_layout, stretch=4)
 
-        # Right: Speed
+        # Right: Speed and Controls
+        controls_layout = QVBoxLayout()
+        controls_layout.setSpacing(5)
+        
         self.lbl_speed = QLabel("-- MB/s")
         self.lbl_speed.setStyleSheet("color: #58A6FF; font-size: 14px; font-weight: bold;")
         self.lbl_speed.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
-        main_layout.addWidget(self.lbl_speed, stretch=1)
+        btns_layout = QHBoxLayout()
+        btns_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
+        
+        self.btn_pause = QPushButton("Pause")
+        self.btn_pause.setFixedWidth(70)
+        self.btn_pause.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_pause.setStyleSheet("background-color: #21262D; color: #FFFFFF; border: 1px solid #30363D; border-radius: 4px; padding: 4px;")
+        self.btn_pause.clicked.connect(self._toggle_pause)
+        
+        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel.setFixedWidth(70)
+        self.btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_cancel.setStyleSheet("background-color: #DA3633; color: #FFFFFF; border: none; border-radius: 4px; padding: 4px;")
+        self.btn_cancel.clicked.connect(self._cancel_download)
+        
+        btns_layout.addWidget(self.btn_pause)
+        btns_layout.addWidget(self.btn_cancel)
+        
+        controls_layout.addWidget(self.lbl_speed)
+        controls_layout.addLayout(btns_layout)
+        
+        main_layout.addLayout(controls_layout, stretch=1)
+
+    def _toggle_pause(self):
+        if self.task.is_paused:
+            self.task.resume()
+            self.btn_pause.setText("Pause")
+            self.lbl_status.setText("Resuming download...")
+            self.lbl_status.setStyleSheet("color: #8B949E; font-size: 12px;")
+        else:
+            self.task.pause()
+            self.btn_pause.setText("Resume")
+            self.lbl_status.setText("Paused")
+            self.lbl_status.setStyleSheet("color: #D2A8FF; font-size: 12px; font-weight: bold;")
+            self.lbl_speed.setText("-- MB/s")
+
+    def _cancel_download(self):
+        self.task.cancel()
+        self.btn_pause.setEnabled(False)
+        self.btn_cancel.setEnabled(False)
+        self.lbl_status.setText("Canceled")
+        self.lbl_status.setStyleSheet("color: #8B949E; font-size: 12px; text-decoration: line-through;")
+        self.lbl_speed.setText("")
 
     def update_progress(self, line: str):
         """
@@ -110,21 +156,36 @@ class ActiveDownloadWidget(QFrame):
 
     def mark_complete(self):
         self.progress_bar.setValue(100)
-        self.lbl_status.setText("Download Complete!")
-        self.lbl_speed.setText("")
+        self.lbl_status.setText("Download Complete")
+        self.lbl_status.setStyleSheet("color: #3FB950; font-weight: bold; font-size: 14px;") # Green
+        self.lbl_speed.setText("Done")
         self.progress_bar.setStyleSheet("""
             QProgressBar {
-                border: none;
-                border-radius: 6px;
                 background-color: #21262D;
+                border-radius: 6px;
             }
             QProgressBar::chunk {
-                background-color: #1F6FEB; /* Blue on completion */
+                background-color: #3FB950;
                 border-radius: 6px;
             }
         """)
+        self.btn_pause.setEnabled(False)
+        self.btn_cancel.setEnabled(False)
 
     def mark_error(self, err_msg: str):
-        self.lbl_status.setText(f"Error: {err_msg}")
-        self.lbl_status.setStyleSheet("color: #F85149; font-size: 12px;") # Red error text
-        self.lbl_speed.setText("")
+        self.lbl_status.setText(f"Hata: {err_msg}")
+        self.lbl_status.setStyleSheet("color: #F85149; font-size: 12px; font-weight: bold;")
+        self.lbl_speed.setText("Başarısız")
+        self.lbl_speed.setStyleSheet("color: #F85149; font-size: 14px; font-weight: bold;")
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                background-color: #21262D;
+                border-radius: 6px;
+            }
+            QProgressBar::chunk {
+                background-color: #DA3633;
+                border-radius: 6px;
+            }
+        """)
+        self.btn_pause.setEnabled(False)
+        self.btn_cancel.setEnabled(False)

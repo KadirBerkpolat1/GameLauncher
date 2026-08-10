@@ -10,7 +10,7 @@ def run_app(loop: asyncio.AbstractEventLoop) -> int:
     Initializes the QApplication, applies the stylesheet, and manages the async loop.
     """
     app = QApplication(sys.argv)
-    app.setApplicationName("GameLauncher")
+    app.setApplicationName("Nebula Launcher")
     app.setStyleSheet(DARK_THEME)
 
     window = MainWindow()

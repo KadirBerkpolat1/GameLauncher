@@ -37,3 +37,9 @@ test_*.py
 
 # Logs
 *.log
+
+# Session dumps / exports
+omp-session-*.html
+
+# SLSsteam download staging
+SLSsteam_Download/

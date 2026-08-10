@@ -95,18 +95,47 @@ class HomeWidget(QWidget):
     def refresh_stats(self):
         try:
             cfg = SLSsteamConfigManager()
-            apps = cfg.config.get("apps", {})
-            self.card_games.layout().itemAt(0).widget().setText(str(len(apps)))
-            
-            # Count luas roughly
+            app_ids = set(cfg.config_data.get("AppIds", []) or [])
+            app_ids.update(cfg.config_data.get("AdditionalApps", []) or [])
+            self.card_games.layout().itemAt(0).widget().setText(str(len(app_ids)))
+
             lua_count = 0
-            if get_steam_path():
-                plugin_dir = get_steam_path() / "config" / "stplug-in"
+            lua_size = 0
+            steam_path = get_steam_path()
+            if steam_path:
+                plugin_dir = steam_path / "config" / "stplug-in"
                 if plugin_dir.exists():
-                    lua_count = len(list(plugin_dir.glob("*.lua")))
+                    lua_files = list(plugin_dir.glob("*.lua"))
+                    lua_count = len(lua_files)
+                    lua_size = sum(f.stat().st_size for f in lua_files if f.is_file())
+
             self.card_luas.layout().itemAt(0).widget().setText(str(lua_count))
-            
-            # Table could be loaded from a local sqlite or settings history in the future
-            # For now, we leave it empty to match a fresh install
-        except Exception:
-            pass
+            self.card_size.layout().itemAt(0).widget().setText(self._format_size(lua_size))
+            self._load_recent_downloads()
+        except Exception as e:
+            print(f"Error refreshing Home stats: {e}")
+
+    @staticmethod
+    def _format_size(size_bytes: int) -> str:
+        gb = size_bytes / (1024 ** 3)
+        if gb >= 1:
+            return f"{gb:.2f} GB"
+        mb = size_bytes / (1024 ** 2)
+        if mb >= 1:
+            return f"{mb:.1f} MB"
+        kb = size_bytes / 1024
+        if kb >= 1:
+            return f"{kb:.1f} KB"
+        return f"{size_bytes} B"
+
+    def _load_recent_downloads(self):
+        from src.config.settings import SettingsManager
+        history = SettingsManager.get("download_history", []) or []
+        self.table.setRowCount(0)
+        for entry in reversed(history[-20:]):
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            self.table.setItem(row, 0, QTableWidgetItem(entry.get("title", "")))
+            self.table.setItem(row, 1, QTableWidgetItem(entry.get("size", "")))
+            self.table.setItem(row, 2, QTableWidgetItem(entry.get("date", "")))
+            self.table.setItem(row, 3, QTableWidgetItem(entry.get("status", "")))
