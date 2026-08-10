@@ -14,6 +14,7 @@ class LibraryWidget(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        self._load_generation = 0
         self.init_ui()
 
     def init_ui(self) -> None:
@@ -172,6 +173,7 @@ class LibraryWidget(QWidget):
 
             # Fetch game details asynchronously
             loop = get_async_loop()
+            self._load_generation += 1
             loop.create_task(self._fetch_and_display_library(list(app_ids)))
 
         except Exception as e:
@@ -181,8 +183,12 @@ class LibraryWidget(QWidget):
     async def _fetch_and_display_library(self, app_ids: list) -> None:
         import httpx
 
+        generation = self._load_generation
+
         async with httpx.AsyncClient() as client:
             for app_id in app_ids:
+                if generation != self._load_generation:
+                    return
                 title = f"App {app_id}"
                 image_url = ""
                 try:
@@ -196,6 +202,10 @@ class LibraryWidget(QWidget):
                 except Exception as e:
                     print(f"Error fetching name for {app_id}: {e}")
 
+                if generation != self._load_generation:
+                    return
+
                 card = GameCard(app_id, title, image_url, mode="library")
                 card.download_requested.connect(self.download_requested.emit)
+                card.uninstalled.connect(lambda _app_id: self.load_library())
                 self.grid_layout.addWidget(card)

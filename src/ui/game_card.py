@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
 from PySide6.QtGui import QPixmap, QImage
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import Qt, QUrl, Signal, QTimer
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from src.config.slssteam import SLSsteamConfigManager
 from src.services.download import DownloadManager
@@ -12,6 +12,7 @@ class GameCard(QFrame):
     Fetches the cover art natively using QNetworkAccessManager.
     """
     download_requested = Signal(int, str)
+    uninstalled = Signal(int)
 
     def __init__(self, app_id: int, title: str, image_url: str = "", mode: str = "search") -> None:
         super().__init__()
@@ -75,17 +76,17 @@ class GameCard(QFrame):
             btn_layout.addWidget(self.btn_remove)
             btn_layout.addWidget(self.btn_commit)
         elif self.mode == "library":
-            self.btn_remove_lib = QPushButton("Delete Lua")
-            self.btn_remove_lib.setProperty("cssClass", "SecondaryAction")
-            self.btn_remove_lib.setStyleSheet("background-color: #DA3633; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600;")
-            self.btn_remove_lib.clicked.connect(self._remove_from_library)
+            self.btn_uninstall = QPushButton("Uninstall")
+            self.btn_uninstall.setProperty("cssClass", "SecondaryAction")
+            self.btn_uninstall.setStyleSheet("background-color: #DA3633; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600;")
+            self.btn_uninstall.clicked.connect(self._uninstall_game)
 
-            self.btn_uninstall = QPushButton("Download")
-            self.btn_uninstall.setProperty("cssClass", "PrimaryAction")
-            self.btn_uninstall.clicked.connect(self._request_download)
+            self.btn_download = QPushButton("Download")
+            self.btn_download.setProperty("cssClass", "PrimaryAction")
+            self.btn_download.clicked.connect(self._request_download)
 
             btn_layout.addWidget(self.btn_uninstall)
-            btn_layout.addWidget(self.btn_remove_lib)
+            btn_layout.addWidget(self.btn_download)
         layout.addLayout(btn_layout)
 
         # Network Manager for Image Downloading
@@ -180,6 +181,68 @@ class GameCard(QFrame):
             
     def _request_download(self) -> None:
         self.download_requested.emit(self.app_id, self.title)
+
+    def _uninstall_game(self) -> None:
+        """Asks for confirmation, then fully uninstalls the game (files,
+        Proton prefix, manifests, config entries) in a background thread."""
+        from PySide6.QtWidgets import QMessageBox
+
+        confirm = QMessageBox.question(
+            self,
+            "Uninstall Game",
+            f"Uninstall \"{self.title}\" (App {self.app_id})?\n\n"
+            "This will permanently delete:\n"
+            "  • The game files (steamapps/common/...)\n"
+            "  • The Proton prefix (compatdata/<appid>)\n"
+            "  • appmanifest, depotcache manifests and stplug-in Lua\n"
+            "  • The entry from your SLSsteam library\n\n"
+            "Downloaded saves may be lost. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+
+        self.btn_uninstall.setEnabled(False)
+        self.btn_uninstall.setText("Uninstalling...")
+
+        def _run() -> None:
+            try:
+                from src.services.uninstall import uninstall_game
+                summary = uninstall_game(self.app_id)
+                QTimer.singleShot(0, lambda: self._on_uninstall_done(summary))
+            except Exception as e:
+                QTimer.singleShot(0, lambda: self._on_uninstall_error(str(e)))
+
+        import threading
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_uninstall_done(self, summary: dict) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        details = []
+        if summary.get("files"):
+            details.append("Game files deleted")
+        if summary.get("acf"):
+            details.append("appmanifest deleted")
+        if summary.get("prefix"):
+            details.append("Proton prefix deleted")
+        if summary.get("depotcache"):
+            details.append(f"{summary['depotcache']} depotcache manifest(s) deleted")
+        if summary.get("config"):
+            details.append("Library entry removed")
+        QMessageBox.information(
+            self,
+            "Uninstall Complete",
+            f"\"{self.title}\" has been uninstalled.\n\n" + ("\n".join(details) if details else "Nothing found to delete."),
+        )
+        self.uninstalled.emit(self.app_id)
+        self.deleteLater()
+
+    def _on_uninstall_error(self, error: str) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        self.btn_uninstall.setEnabled(True)
+        self.btn_uninstall.setText("Uninstall")
+        QMessageBox.warning(self, "Uninstall Failed", f"An error occurred:\n{error}")
 
     def _remove_from_library(self) -> None:
         """Removes the game from the SLSsteam configuration and visually hides the card."""

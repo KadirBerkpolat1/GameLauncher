@@ -64,3 +64,40 @@ class VDFManager:
                 vdf.dump(data, f, pretty=True)
         except Exception as e:
             raise VDFParserError(f"Failed to write changes to config.vdf: {e}")
+
+    def remove_depot_key(self, depot_id: str) -> bool:
+        """
+        Removes the depot decryption key entry for the given depot from the
+        config.vdf 'depots' section. Returns True if an entry was removed.
+        """
+        self._ensure_exists()
+
+        try:
+            with open(self.config_vdf_path, 'r', encoding='utf-8') as f:
+                data = vdf.load(f)
+        except Exception as e:
+            raise VDFParserError(f"Failed to parse config.vdf: {e}")
+
+        steam_node = data.get("InstallConfigStore", {}).get("Software", {}).get("Valve", {}).get("Steam", {})
+        if not steam_node:
+            steam_node = data.get("Software", {}).get("Valve", {}).get("Steam", {})
+
+        if not steam_node:
+            raise VDFParserError("Could not locate Software->Valve->Steam node in config.vdf")
+
+        depots = steam_node.get("depots")
+        removed = False
+        if isinstance(depots, dict) and str(depot_id) in depots:
+            del depots[str(depot_id)]
+            removed = True
+
+        if not removed:
+            return False
+
+        try:
+            with open(self.config_vdf_path, 'w', encoding='utf-8') as f:
+                vdf.dump(data, f, pretty=True)
+        except Exception as e:
+            raise VDFParserError(f"Failed to write changes to config.vdf: {e}")
+
+        return True
