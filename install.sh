@@ -29,7 +29,8 @@ echo
 
 # ── 1. Kaynak dizin çözümü ──
 echo -e "${YELLOW}[1/7]${NC} Kaynak hazırlanıyor..."
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# curl | bash ile çalışırken BASH_SOURCE[0] boştur; ".." güvenli bir varsayılandır.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" && pwd)"
 SOURCE_DIR="$SCRIPT_DIR"
 
 if [ ! -f "$SOURCE_DIR/src/main.py" ] || [ ! -f "$SOURCE_DIR/requirements.txt" ]; then
