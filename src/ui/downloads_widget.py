@@ -176,8 +176,7 @@ class DownloadsWidget(QWidget):
                     if download_method == "ddmod":
                         self.active_scroll.show()
                         dl_widget = ActiveDownloadWidget(app_id, title)
-                        self.active_downloads_layout.addWidget(dl_widget)
-                        
+                        has_error = False
                         for depot in depots:
                             depot_id = depot.get("depot_id")
                             man_id = depot.get("manifest_id")
@@ -186,9 +185,11 @@ class DownloadsWidget(QWidget):
                                     async for progress in DownloadManager.install_via_ddmod(app_id, depot_id, man_id):
                                         dl_widget.update_progress(progress)
                                 except Exception as e:
+                                    has_error = True
                                     dl_widget.mark_error(str(e))
                                     print(f"DDMod Error for depot {depot_id}: {e}")
-                        dl_widget.mark_complete()
+                        if not has_error:
+                            dl_widget.mark_complete()
                     else:
                         # Fallback to Steam protocol
                         DownloadManager.install_via_steam(app_id)
