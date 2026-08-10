@@ -240,6 +240,36 @@ class DownloadsWidget(QWidget):
                             self._record_history(app_id, title, "Completed")
                             self._load_history()
 
+                            # Güvenli Yama Uygulama ve Steam Restart
+                            if game_data.get("apply_onlinefix", False):
+                                from PySide6.QtWidgets import QMessageBox
+                                from PySide6.QtCore import QTimer
+                                import subprocess
+                                from src.utils.onlinefix_patcher import OnlineFixPatcher
+
+                                reply = QMessageBox.question(
+                                    self, "İndirme Tamamlandı",
+                                    f"{title} başarıyla indirildi!\n\nOnlineFix yamasının Steam tarafından silinmeden kurulabilmesi için Steam'in yeniden başlatılması gerekiyor. Steam şimdi yeniden başlatılsın mı?\n\n(Arka planda oyun oynuyorsanız 'No' seçin ve kütüphaneden manuel yama yapın).",
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                    QMessageBox.StandardButton.Yes
+                                )
+
+                                if reply == QMessageBox.StandardButton.Yes:
+                                    def do_patch():
+                                        try:
+                                            OnlineFixPatcher.apply_patch(str(app_id), task.download_dir)
+                                            subprocess.Popen(["steam"], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                            QMessageBox.information(self, "Başarılı", "Yama uygulandı ve Steam yeniden başlatılıyor!")
+                                        except Exception as e:
+                                            QMessageBox.critical(self, "Hata", str(e))
+
+                                    res = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
+                                    if res.returncode == 0:
+                                        subprocess.run(["steam", "-shutdown"], check=False)
+                                        QTimer.singleShot(4000, do_patch)
+                                    else:
+                                        do_patch()
+
                     await task.run(progress_callback=progress_cb, error_callback=error_cb, complete_callback=complete_cb)
 
                     if task.is_canceled:
