@@ -149,6 +149,21 @@ class SettingsDialog(QDialog):
         api_input_layout.addWidget(self.api_key_input)
         api_input_layout.addWidget(validate_btn)
         api_layout.addLayout(api_input_layout)
+        # SteamGridDB API Key
+        sgdb_group = QGroupBox("SteamGridDB API Key")
+        sgdb_layout = QVBoxLayout()
+        sgdb_desc = QLabel("Optional: Enter your API key to fetch high-quality vertical covers from SteamGridDB instead of Steam.")
+        sgdb_desc.setWordWrap(True)
+        sgdb_layout.addWidget(sgdb_desc)
+        
+        self.sgdb_key_input = QLineEdit()
+        self.sgdb_key_input.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit)
+        self.sgdb_key_input.setText(SettingsManager.get("steamgriddb_api_key", ""))
+        self.sgdb_key_input.setPlaceholderText("SteamGridDB API Key...")
+        sgdb_layout.addWidget(self.sgdb_key_input)
+        sgdb_group.setLayout(sgdb_layout)
+        layout.addWidget(sgdb_group)
+        
         
         self.auto_upload_cb = QCheckBox("Automatically upload new config keys to Hubcap")
         self.auto_upload_cb.setChecked(SettingsManager.get("auto_upload_keys", True))
@@ -407,6 +422,7 @@ class SettingsDialog(QDialog):
 
     def _save_settings(self) -> None:
         SettingsManager.set("hubcap_api_key", self.api_key_input.text().strip())
+        SettingsManager.set("steamgriddb_api_key", self.sgdb_key_input.text().strip())
         SettingsManager.set("auto_upload_keys", self.auto_upload_cb.isChecked())
         SettingsManager.set("steamtools_mode", self.radio_st.isChecked())
         SettingsManager.set("steam_path", self.steam_path_input.text())

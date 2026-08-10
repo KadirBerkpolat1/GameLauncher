@@ -95,14 +95,43 @@ class GameCard(QFrame):
             self.image_label.setText("No Image")
 
     def _fetch_image(self, index: int = 0) -> None:
-        self.image_urls = [
-            f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/library_600x900.jpg",
-            f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/header.jpg",
-            f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/capsule_616x353.jpg",
-        ]
-        if self.image_url and self.image_url not in self.image_urls:
-            self.image_urls.append(self.image_url)
+        if not hasattr(self, 'image_urls'):
+            self.image_urls = [
+                f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/library_600x900.jpg",
+                f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/header.jpg",
+                f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{self.app_id}/capsule_616x353.jpg",
+            ]
+            if self.image_url and self.image_url not in self.image_urls:
+                self.image_urls.append(self.image_url)
 
+        if index == 0:
+            from src.config.settings import SettingsManager
+            sgdb_key = SettingsManager.get("steamgriddb_api_key", "")
+            if sgdb_key:
+                import asyncio
+                asyncio.get_event_loop().create_task(self._resolve_and_fetch_sgdb(sgdb_key))
+                return
+
+        self._start_network_fetch(index)
+
+    async def _resolve_and_fetch_sgdb(self, api_key: str) -> None:
+        try:
+            import httpx
+            url = f"https://www.steamgriddb.com/api/v2/grids/game/steam/{self.app_id}?dimensions=600x900"
+            headers = {"Authorization": f"Bearer {api_key}"}
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                resp = await client.get(url, headers=headers, timeout=5.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("success") and data.get("data"):
+                        sgdb_image_url = data["data"][0]["url"]
+                        self.image_urls.insert(0, sgdb_image_url)
+        except Exception as e:
+            print(f"SteamGridDB API error for {self.app_id}: {e}")
+        
+        self._start_network_fetch(0)
+
+    def _start_network_fetch(self, index: int) -> None:
         if index < len(self.image_urls):
             self.current_url_index = index
             request = QNetworkRequest(QUrl(self.image_urls[index]))
@@ -125,11 +154,9 @@ class GameCard(QFrame):
             self.image_label.setPixmap(pixmap)
             self.image_label.setText("")
         else:
-            # Fallback to the next URL in the queue
             self._fetch_image(getattr(self, 'current_url_index', 0) + 1)
 
         reply.deleteLater()
-
     def _remove_from_queue(self) -> None:
         try:
             from src.config.settings import SettingsManager
