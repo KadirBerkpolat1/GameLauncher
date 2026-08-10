@@ -1,83 +1,72 @@
 import asyncio
 import httpx
-import os
 import shutil
-import tarfile
-import zipfile
-import io
 from pathlib import Path
-from typing import Dict, Any
 
 class InstallerError(Exception):
     pass
 
 class DDModInstaller:
-    """Handles downloading and setting up DepotDownloader from SteamRE."""
-    GITHUB_API_URL = "https://api.github.com/repos/SteamRE/DepotDownloader/releases/latest"
+    """
+    Sets up the modded DepotDownloaderMod binary (SteamAutoCracks fork).
+
+    The fork adds -depotkeys and -manifestfile, enabling anonymous downloads
+    with just the depot keys and a manifest file. Its official releases only
+    ship Windows builds, so we bundle a self-contained x64 Linux build in
+    assets/deps/ (rebuilt via scripts/build_ddmod.sh). If the bundle is not
+    present (e.g. a source checkout), we fall back to the binary Accela ships.
+    """
+    # Bundled Linux standalone built from the fork (see scripts/build_ddmod.sh).
+    BUNDLED_PATH = Path(__file__).resolve().parents[2] / "assets" / "deps" / "DepotDownloaderMod"
+    # Fallback: the Linux build Accela bundles (same fork).
+    MOD_BINARY_URL = (
+        "https://raw.githubusercontent.com/FaultyPacketOverflowVector/Accela/"
+        "main/src/deps/DepotDownloaderMod"
+    )
     INSTALL_DIR = Path.home() / ".config" / "GameLauncher" / "DDMod"
 
     @classmethod
     async def update_ddmod(cls) -> str:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.get(cls.GITHUB_API_URL, timeout=10.0)
-            resp.raise_for_status()
-            data = resp.json()
-            tag = data.get("tag_name", "unknown")
-            assets = data.get("assets", [])
+        source = None
+        content = None
 
-            download_url = None
-            for asset in assets:
-                if "linux-x64.zip" in asset["name"].lower():
-                    download_url = asset["browser_download_url"]
-                    break
-            
-            # Fallback to any zip if linux-x64 is not found
-            if not download_url:
-                for asset in assets:
-                    if asset["name"].endswith(".zip"):
-                        download_url = asset["browser_download_url"]
-                        break
+        # Prefer the bundled binary shipped with this repo.
+        if cls.BUNDLED_PATH.exists():
+            content = cls.BUNDLED_PATH.read_bytes()
+            source = str(cls.BUNDLED_PATH)
 
-            if not download_url:
-                raise InstallerError("No ZIP asset found in latest DepotDownloader release.")
+        # Otherwise fetch the fallback URL.
+        if content is None:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                resp = await client.get(cls.MOD_BINARY_URL, timeout=30.0)
+                resp.raise_for_status()
+                content = resp.content
+                source = cls.MOD_BINARY_URL
 
-            zip_resp = await client.get(download_url, timeout=30.0)
-            zip_resp.raise_for_status()
+        # Sanity check: make sure we actually got an ELF and not an HTML error page.
+        if content[:4] != b"\x7fELF":
+            raise InstallerError(
+                "Downloaded DepotDownloaderMod is not a valid Linux binary."
+            )
 
-            if cls.INSTALL_DIR.exists():
-                shutil.rmtree(cls.INSTALL_DIR)
-            cls.INSTALL_DIR.mkdir(parents=True, exist_ok=True)
+        if cls.INSTALL_DIR.exists():
+            shutil.rmtree(cls.INSTALL_DIR)
+        cls.INSTALL_DIR.mkdir(parents=True, exist_ok=True)
 
-            with zipfile.ZipFile(io.BytesIO(zip_resp.content)) as z:
-                z.extractall(cls.INSTALL_DIR)
+        bin_path = cls.INSTALL_DIR / "DepotDownloaderMod"
+        bin_path.write_bytes(content)
+        bin_path.chmod(0o755)
 
-            # Look for linux standalone binary first, then fallback to dll
-            bin_path = cls.INSTALL_DIR / "DepotDownloader"
-            if not bin_path.exists():
-                for path in cls.INSTALL_DIR.rglob("DepotDownloader"):
-                    bin_path = path
-                    break
+        from src.config.settings import SettingsManager
+        SettingsManager.set("depotdownloadermod_path", str(bin_path))
+        return f"3.4.0-mod (from {source})"
 
-            if bin_path.exists() and not bin_path.is_dir():
-                # Make it executable
-                bin_path.chmod(0o755)
-                found_path = bin_path
-            else:
-                # Fallback to .dll
-                dll_path = cls.INSTALL_DIR / "DepotDownloader.dll"
-                if not dll_path.exists():
-                    for path in cls.INSTALL_DIR.rglob("DepotDownloader.dll"):
-                        dll_path = path
-                        break
-                found_path = dll_path if dll_path.exists() else None
-
-            if found_path:
-                from src.config.settings import SettingsManager
-                SettingsManager.set("depotdownloadermod_path", str(found_path))
-            else:
-                raise InstallerError("DepotDownloader executable/dll not found after extraction.")
-
-            return tag
+    @classmethod
+    async def uninstall_ddmod(cls) -> None:
+        if cls.INSTALL_DIR.exists():
+            shutil.rmtree(cls.INSTALL_DIR)
+        from src.config.settings import SettingsManager
+        SettingsManager.set("depotdownloadermod_path", "")
 
     @classmethod
     async def uninstall_ddmod(cls) -> None:
