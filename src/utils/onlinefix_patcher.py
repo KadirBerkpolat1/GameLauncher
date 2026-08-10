@@ -7,7 +7,7 @@ from src.utils.vdf_parser import LocalConfigManager
 class OnlineFixPatcher:
     @staticmethod
     def apply_patch(app_id: str, game_dir: str):
-        root_dir = Path.cwd()
+        root_dir = Path(__file__).resolve().parent.parent.parent
         assets_dir = root_dir / "assets" / "onlinefix"
         legacy_dir = root_dir / "REPO_Fix_Repair_Steam_V5_Generic"
 
@@ -18,7 +18,7 @@ class OnlineFixPatcher:
             shutil.move(str(legacy_dir), str(assets_dir))
 
         if not assets_dir.exists():
-            return
+            raise FileNotFoundError(f"Yama şablonu bulunamadı! Beklenen yol: {assets_dir}")
 
         # Copy files to game_dir
         for item in assets_dir.iterdir():
