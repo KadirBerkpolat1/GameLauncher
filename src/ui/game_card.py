@@ -184,23 +184,9 @@ class GameCard(QFrame):
 
         reply.deleteLater()
     def _add_to_library(self) -> None:
-        self.btn_download.setText("Adding...")
+        self.btn_download.setText("Queuing...")
         self.btn_download.setEnabled(False)
-        
-        loop = get_async_loop()
-        loop.create_task(self._async_add_to_library())
-        
-    async def _async_add_to_library(self) -> None:
-        try:
-            from src.services.download import DownloadManager
-            # prepare_game_data fetches the lua and updates SLSsteamConfigManager
-            await DownloadManager.prepare_game_data(self.app_id, scope="full")
-            self.btn_download.setText("Added to Library")
-            self.btn_download.setStyleSheet("background-color: #238636; color: white;")
-        except Exception as e:
-            self.btn_download.setText("Error")
-            self.btn_download.setEnabled(True)
-            print(f"Error adding to library: {e}")
+        self.download_requested.emit(self.app_id, self.title)
             
     def _request_download(self) -> None:
         self.download_requested.emit(self.app_id, self.title)
