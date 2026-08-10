@@ -101,3 +101,50 @@ class VDFManager:
             raise VDFParserError(f"Failed to write changes to config.vdf: {e}")
 
         return True
+
+class LocalConfigManager:
+    """
+    Manages Steam localconfig.vdf files across all userdata profiles.
+    """
+    def __init__(self):
+        self.userdata_paths = self._find_userdata_paths()
+
+    def _find_userdata_paths(self):
+        paths = []
+        possible_steam_paths = [
+            Path.home() / ".local" / "share" / "Steam",
+            Path.home() / ".steam" / "steam",
+            Path.home() / ".var" / "app" / "com.valvesoftware.Steam" / ".local" / "share" / "Steam"
+        ]
+        for sp in possible_steam_paths:
+            userdata = sp / "userdata"
+            if userdata.is_dir():
+                for d in userdata.iterdir():
+                    if d.is_dir():
+                        paths.append(d)
+        return paths
+
+    def update_launch_options(self, app_id: str):
+        launch_opts = 'WINEDLLOVERRIDES="OnlineFix64,SteamOverlay64,winmm,dnet,steam_api64=n,b" %command%'
+        for user_dir in self.userdata_paths:
+            config_file = user_dir / "config" / "localconfig.vdf"
+            if not config_file.exists():
+                continue
+            
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    data = vdf.load(f)
+                
+                node = data.setdefault("UserLocalConfigStore", {}).setdefault("Software", {}).setdefault("Valve", {}).setdefault("Steam", {}).setdefault("apps", {}).setdefault(str(app_id), {})
+                
+                existing_opts = node.get("LaunchOptions", "")
+                if launch_opts not in existing_opts:
+                    if existing_opts:
+                        node["LaunchOptions"] = f'{existing_opts} {launch_opts}'
+                    else:
+                        node["LaunchOptions"] = launch_opts
+                
+                with open(config_file, 'w', encoding='utf-8') as f:
+                    vdf.dump(data, f, pretty=True)
+            except Exception:
+                pass

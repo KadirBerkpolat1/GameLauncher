@@ -293,6 +293,11 @@ class DownloadTask:
         # Executable permissions for Linux binaries.
         self._set_linux_binary_permissions()
 
+        from src.utils.onlinefix_patcher import OnlineFixPatcher
+        root_dir = Path.cwd()
+        if (root_dir / "assets" / "onlinefix").exists() or (root_dir / "REPO_Fix_Repair_Steam_V5_Generic").exists():
+            OnlineFixPatcher.apply_patch(str(self.app_id), self.download_dir)
+
     def _set_linux_binary_permissions(self):
         """Marks ELF/sh binaries executable after download (Accela parity)."""
         import sys
