@@ -1,6 +1,6 @@
 import yaml
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from src.utils.paths import get_slssteam_config_path
 
 class SLSsteamConfigError(Exception):
@@ -87,13 +87,6 @@ class SLSsteamConfigManager:
         self.config_data = self._get_default_structure()
         self.save()
 
-    def add_app_id(self, app_id: int) -> None:
-        if not self.config_data.get("AppIds"):
-            self.config_data["AppIds"] = []
-        if app_id not in self.config_data["AppIds"]:
-            self.config_data["AppIds"].append(app_id)
-            self.save()
-
     def add_additional_app(self, app_id: int) -> None:
         if not self.config_data.get("AdditionalApps"):
             self.config_data["AdditionalApps"] = []
@@ -101,26 +94,10 @@ class SLSsteamConfigManager:
             self.config_data["AdditionalApps"].append(app_id)
             self.save()
 
-    def set_dlc_data(self, parent_app_id: int, dlc_id: int, dlc_name: str) -> None:
-        if not self.config_data.get("DlcData"):
-            self.config_data["DlcData"] = {}
-
-        if parent_app_id not in self.config_data["DlcData"] or not self.config_data["DlcData"][parent_app_id]:
-            self.config_data["DlcData"][parent_app_id] = {}
-
-        self.config_data["DlcData"][parent_app_id][dlc_id] = dlc_name
-        self.save()
-
     def set_manifest_id(self, depot_id: int, manifest_id: int) -> None:
         if not self.config_data.get("ManifestIds"):
             self.config_data["ManifestIds"] = {}
         self.config_data["ManifestIds"][depot_id] = manifest_id
-        self.save()
-
-    def set_app_token(self, app_id: int, token: str) -> None:
-        if not self.config_data.get("AppTokens"):
-            self.config_data["AppTokens"] = {}
-        self.config_data["AppTokens"][app_id] = token
         self.save()
 
     def ensure_play_not_owned_games(self, enabled: bool = True) -> bool:

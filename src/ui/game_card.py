@@ -2,8 +2,6 @@ from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QPushButton, QHBoxLay
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt, QUrl, Signal, QTimer
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
-from src.config.slssteam import SLSsteamConfigManager
-from src.services.download import DownloadManager
 from src.utils.async_utils import get_async_loop
 
 class GameCard(QFrame):
@@ -243,16 +241,3 @@ class GameCard(QFrame):
         self.btn_uninstall.setEnabled(True)
         self.btn_uninstall.setText("Uninstall")
         QMessageBox.warning(self, "Uninstall Failed", f"An error occurred:\n{error}")
-
-    def _remove_from_library(self) -> None:
-        """Removes the game from the SLSsteam configuration and visually hides the card."""
-        try:
-            from src.config.slssteam import SLSsteamConfigManager
-            manager = SLSsteamConfigManager()
-            # Tip uyuşmazlıklarına ve YAML parser'ın boş değerleri None yapmasına karşı tam güvenlik
-            manager.config_data["AdditionalApps"] = [x for x in (manager.config_data.get("AdditionalApps") or []) if str(x) != str(self.app_id)]
-            manager.config_data["AppIds"] = [x for x in (manager.config_data.get("AppIds") or []) if str(x) != str(self.app_id)]
-            manager.save()
-            self.deleteLater() # Sadece gizlemek yerine widget'ı tamamen bellekten ve ekrandan sil
-        except Exception as e:
-            print(f"Error removing from library: {e}")

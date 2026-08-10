@@ -1,18 +1,8 @@
 import asyncio
 import os
-import subprocess
 import tempfile
 from pathlib import Path
 from src.config.settings import SettingsManager
-
-
-class DownloadPausedError(Exception):
-    pass
-
-
-class DownloadCanceledError(Exception):
-    pass
-
 
 class DownloadTask:
     """
