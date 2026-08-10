@@ -125,7 +125,7 @@ class LocalConfigManager:
         return paths
 
     def update_launch_options(self, app_id: str):
-        launch_opts = 'WINEDLLOVERRIDES="OnlineFix64,SteamOverlay64,winmm,dnet,steam_api64=n,b" %command%'
+        launch_opts = 'WINEDLLOVERRIDES="custom=n;onlinefix64=n;steam_api64=n;winmm=n,b" %command%'
         for user_dir in self.userdata_paths:
             config_file = user_dir / "config" / "localconfig.vdf"
             if not config_file.exists():
