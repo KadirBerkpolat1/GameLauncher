@@ -100,6 +100,8 @@ class GameCard(QFrame):
             self.btn_download.setProperty("cssClass", "PrimaryAction")
             self.btn_download.clicked.connect(self._request_download)
 
+            btn_layout.addWidget(self.btn_uninstall)
+            btn_layout.addWidget(self.btn_download)
             installed_path = get_installed_game_path(self.app_id)
             if installed_path:
                 self.btn_apply_fix = QPushButton("Apply Fix")
@@ -208,25 +210,24 @@ class GameCard(QFrame):
         QMessageBox.information(self, "Success", "OnlineFix applied successfully!")
 
     def _uninstall_game(self) -> None:
-        """Asks for confirmation, then fully uninstalls the game (files,
-        Proton prefix, manifests, config entries) in a background thread."""
-        from PySide6.QtWidgets import QMessageBox
+        from PySide6.QtWidgets import QMessageBox, QPushButton
 
-        confirm = QMessageBox.question(
-            self,
-            "Uninstall Game",
-            f"Uninstall \"{self.title}\" (App {self.app_id})?\n\n"
-            "This will permanently delete:\n"
-            "  • The game files (steamapps/common/...)\n"
-            "  • The Proton prefix (compatdata/<appid>)\n"
-            "  • appmanifest, depotcache manifests and stplug-in Lua\n"
-            "  • The entry from your SLSsteam library\n\n"
-            "Downloaded saves may be lost. Continue?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if confirm != QMessageBox.StandardButton.Yes:
+        box = QMessageBox(self)
+        box.setWindowTitle("Gelişmiş Kaldırma Seçenekleri")
+        box.setText(f"{self.title} için neleri kaldırmak istiyorsunuz?")
+
+        btn_both = box.addButton("Her İkisini Sil", QMessageBox.ButtonRole.AcceptRole)
+        btn_game = box.addButton("Sadece Oyun Dosyalarını Sil", QMessageBox.ButtonRole.AcceptRole)
+        btn_lua = box.addButton("Sadece Lua'yı (Kütüphaneden) Sil", QMessageBox.ButtonRole.AcceptRole)
+        btn_cancel = box.addButton("İptal", QMessageBox.ButtonRole.RejectRole)
+
+        box.exec()
+
+        if box.clickedButton() == btn_cancel:
             return
+
+        remove_files = box.clickedButton() in (btn_both, btn_game)
+        remove_lua = box.clickedButton() in (btn_both, btn_lua)
 
         self.btn_uninstall.setEnabled(False)
         self.btn_uninstall.setText("Uninstalling...")
@@ -234,7 +235,7 @@ class GameCard(QFrame):
         def _run() -> None:
             try:
                 from src.services.uninstall import uninstall_game
-                summary = uninstall_game(self.app_id)
+                summary = uninstall_game(self.app_id, remove_files=remove_files, remove_lua=remove_lua)
                 QTimer.singleShot(0, lambda: self._on_uninstall_done(summary))
             except Exception as e:
                 QTimer.singleShot(0, lambda: self._on_uninstall_error(str(e)))

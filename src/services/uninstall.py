@@ -55,7 +55,7 @@ def _find_installdir(app_id: int) -> str:
     return ""
 
 
-def uninstall_game(app_id: int) -> dict:
+def uninstall_game(app_id: int, remove_files: bool = True, remove_lua: bool = True) -> dict:
     """
     Fully removes a game from the system:
       - deletes game files (steamapps/common/<installdir>)
@@ -86,60 +86,61 @@ def uninstall_game(app_id: int) -> dict:
     # --- Steam library data: files, ACF, Proton prefix, depotcache ---
     steam_path = get_steam_path()
 
-    for lib in get_steam_libraries():
-        steamapps = Path(lib) / "steamapps"
+    if remove_files:
+        for lib in get_steam_libraries():
+            steamapps = Path(lib) / "steamapps"
 
-        acf = steamapps / f"appmanifest_{app_id_str}.acf"
-        if acf.exists():
-            try:
-                acf.unlink()
-                summary["acf"] = True
-            except OSError:
-                pass
-
-        if installdir:
-            common_dir = steamapps / "common" / installdir
-            if common_dir.exists():
+            acf = steamapps / f"appmanifest_{app_id_str}.acf"
+            if acf.exists():
                 try:
-                    shutil.rmtree(common_dir)
-                    summary["files"] = True
+                    acf.unlink()
+                    summary["acf"] = True
                 except OSError:
                     pass
 
-        compatdata = steamapps / "compatdata" / app_id_str
-        if compatdata.exists():
-            try:
-                shutil.rmtree(compatdata)
-                summary["prefix"] = True
-            except OSError:
-                pass
+            if installdir:
+                common_dir = steamapps / "common" / installdir
+                if common_dir.exists():
+                    try:
+                        shutil.rmtree(common_dir)
+                        summary["files"] = True
+                    except OSError:
+                        pass
 
-        depotcache = steamapps / "depotcache"
-        if depot_map and depotcache.exists():
-            for depot_id, man_id in depot_map.items():
-                mfile = depotcache / f"{depot_id}_{man_id}.manifest"
+            compatdata = steamapps / "compatdata" / app_id_str
+            if compatdata.exists():
                 try:
-                    if mfile.exists():
-                        mfile.unlink()
-                        summary["depotcache"] += 1
+                    shutil.rmtree(compatdata)
+                    summary["prefix"] = True
                 except OSError:
-                    continue
+                    pass
 
-    # Steam root depotcache (copied during prepare_game_data)
-    if steam_path:
-        depotcache_dir = steam_path / "depotcache"
-        if depot_map and depotcache_dir.exists():
-            for depot_id, man_id in depot_map.items():
-                mfile = depotcache_dir / f"{depot_id}_{man_id}.manifest"
-                try:
-                    if mfile.exists():
-                        mfile.unlink()
-                        summary["depotcache"] += 1
-                except OSError:
-                    continue
+            depotcache = steamapps / "depotcache"
+            if depot_map and depotcache.exists():
+                for depot_id, man_id in depot_map.items():
+                    mfile = depotcache / f"{depot_id}_{man_id}.manifest"
+                    try:
+                        if mfile.exists():
+                            mfile.unlink()
+                            summary["depotcache"] += 1
+                    except OSError:
+                        continue
+
+        # Steam root depotcache (copied during prepare_game_data)
+        if steam_path:
+            depotcache_dir = steam_path / "depotcache"
+            if depot_map and depotcache_dir.exists():
+                for depot_id, man_id in depot_map.items():
+                    mfile = depotcache_dir / f"{depot_id}_{man_id}.manifest"
+                    try:
+                        if mfile.exists():
+                            mfile.unlink()
+                            summary["depotcache"] += 1
+                    except OSError:
+                        continue
 
     # --- config.vdf: remove depot keys for this game ---
-    if steam_path:
+    if remove_files and steam_path:
         try:
             from src.utils.vdf_parser import VDFManager
             vdf_mgr = VDFManager(steam_path)
@@ -153,30 +154,31 @@ def uninstall_game(app_id: int) -> dict:
             pass
 
     # --- SLSsteam config: AppIds, AdditionalApps, ManifestIds ---
-    try:
-        manager = SLSsteamConfigManager()
-        manager.config_data["AdditionalApps"] = [
-            x for x in (manager.config_data.get("AdditionalApps") or [])
-            if str(x) != app_id_str
-        ]
-        manager.config_data["AppIds"] = [
-            x for x in (manager.config_data.get("AppIds") or [])
-            if str(x) != app_id_str
-        ]
-        manifest_ids = manager.config_data.get("ManifestIds")
-        if isinstance(manifest_ids, dict):
-            for depot_id in depot_map:
-                manifest_ids.pop(depot_id, None)
-        app_tokens = manager.config_data.get("AppTokens")
-        if isinstance(app_tokens, dict):
-            app_tokens.pop(app_id_str, None)
-        manager.save()
-        summary["config"] = True
-    except Exception as e:
-        raise UninstallError(f"Failed to update SLSsteam config: {e}")
+    if remove_lua:
+        try:
+            manager = SLSsteamConfigManager()
+            manager.config_data["AdditionalApps"] = [
+                x for x in (manager.config_data.get("AdditionalApps") or [])
+                if str(x) != app_id_str
+            ]
+            manager.config_data["AppIds"] = [
+                x for x in (manager.config_data.get("AppIds") or [])
+                if str(x) != app_id_str
+            ]
+            manifest_ids = manager.config_data.get("ManifestIds")
+            if isinstance(manifest_ids, dict):
+                for depot_id in depot_map:
+                    manifest_ids.pop(depot_id, None)
+            app_tokens = manager.config_data.get("AppTokens")
+            if isinstance(app_tokens, dict):
+                app_tokens.pop(app_id_str, None)
+            manager.save()
+            summary["config"] = True
+        except Exception as e:
+            raise UninstallError(f"Failed to update SLSsteam config: {e}")
 
     # --- stplug-in Lua file ---
-    if steam_path:
+    if remove_lua and steam_path:
         for plugin_dir_name in ("stplug-in", "st-plug-in"):
             plugin_dir = steam_path / "config" / plugin_dir_name
             if plugin_dir.exists():
@@ -188,13 +190,14 @@ def uninstall_game(app_id: int) -> dict:
                         continue
 
     # --- Cached manifest ZIP ---
-    cache_file = Path.home() / ".cache" / "GameLauncher" / "manifests" / f"{app_id_str}.zip"
-    if cache_file.exists():
-        try:
-            cache_file.unlink()
-            summary["cache"] = True
-        except OSError:
-            pass
+    if remove_files:
+        cache_file = Path.home() / ".cache" / "GameLauncher" / "manifests" / f"{app_id_str}.zip"
+        if cache_file.exists():
+            try:
+                cache_file.unlink()
+                summary["cache"] = True
+            except OSError:
+                pass
 
     return summary
 
