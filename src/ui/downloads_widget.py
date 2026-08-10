@@ -101,6 +101,13 @@ class DownloadsWidget(QWidget):
             item.setStyleSheet("color: #888888;")
             self.history_layout.addWidget(item)
 
+    def _remove_active_widget(self, widget) -> None:
+        """Removes a finished download row and hides the section when empty."""
+        self.active_downloads_layout.removeWidget(widget)
+        widget.deleteLater()
+        if self.active_downloads_layout.count() == 0:
+            self.active_scroll.hide()
+
     def _clear_history(self) -> None:
         from src.config.settings import SettingsManager
         SettingsManager.set("download_history", [])
@@ -207,6 +214,7 @@ class DownloadsWidget(QWidget):
 
                     task = DownloadTask(game_data, title)
                     dl_widget = ActiveDownloadWidget(task)
+                    dl_widget.closed.connect(lambda w=dl_widget: self._remove_active_widget(w))
 
                     self.active_downloads_layout.addWidget(dl_widget)
                     self.active_scroll.show()

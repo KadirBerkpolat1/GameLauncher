@@ -1,12 +1,14 @@
 import re
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QProgressBar, QFrame, QPushButton
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 
 class ActiveDownloadWidget(QFrame):
     """
     Displays the progress, speed, and status of an active download.
     Parses DepotDownloader stdout to update the UI.
     """
+    closed = Signal()
+
     def __init__(self, task, parent=None):
         super().__init__(parent)
         self.task = task
@@ -96,9 +98,17 @@ class ActiveDownloadWidget(QFrame):
         self.btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_cancel.setStyleSheet("background-color: #DA3633; color: #FFFFFF; border: none; border-radius: 4px; padding: 4px;")
         self.btn_cancel.clicked.connect(self._cancel_download)
-        
+
+        self.btn_complete = QPushButton("Completed")
+        self.btn_complete.setFixedWidth(90)
+        self.btn_complete.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_complete.setStyleSheet("background-color: #238636; color: #FFFFFF; border: none; border-radius: 4px; padding: 4px;")
+        self.btn_complete.hide()
+        self.btn_complete.clicked.connect(self.closed)
+
         btns_layout.addWidget(self.btn_pause)
         btns_layout.addWidget(self.btn_cancel)
+        btns_layout.addWidget(self.btn_complete)
         
         controls_layout.addWidget(self.lbl_speed)
         controls_layout.addLayout(btns_layout)
@@ -118,10 +128,16 @@ class ActiveDownloadWidget(QFrame):
             self.lbl_status.setStyleSheet("color: #D2A8FF; font-size: 12px; font-weight: bold;")
             self.lbl_speed.setText("-- MB/s")
 
+    def _show_close_button(self, text: str = "Close"):
+        """Replaces the Pause/Cancel controls with a single close button."""
+        self.btn_pause.hide()
+        self.btn_cancel.hide()
+        self.btn_complete.setText(text)
+        self.btn_complete.show()
+
     def _cancel_download(self):
         self.task.cancel()
-        self.btn_pause.setEnabled(False)
-        self.btn_cancel.setEnabled(False)
+        self._show_close_button()
         self.lbl_status.setText("Canceled")
         self.lbl_status.setStyleSheet("color: #8B949E; font-size: 12px; text-decoration: line-through;")
         self.lbl_speed.setText("")
@@ -169,8 +185,7 @@ class ActiveDownloadWidget(QFrame):
                 border-radius: 6px;
             }
         """)
-        self.btn_pause.setEnabled(False)
-        self.btn_cancel.setEnabled(False)
+        self._show_close_button("Completed")
 
     def mark_error(self, err_msg: str):
         self.lbl_status.setText(f"Hata: {err_msg}")
@@ -187,5 +202,4 @@ class ActiveDownloadWidget(QFrame):
                 border-radius: 6px;
             }
         """)
-        self.btn_pause.setEnabled(False)
-        self.btn_cancel.setEnabled(False)
+        self._show_close_button()
