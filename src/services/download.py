@@ -66,18 +66,58 @@ class DownloadManager:
 
         # Return list of depots for DDMod
         return [{"depot_id": k, "decryption_key": v.get("decryption_key"), "manifest_id": v.get("manifest_id")} for k, v in depots.items()]
+    @staticmethod
+    def process_lua_content(lua_content: str, app_id: int) -> list:
+        import re
+        from src.utils.paths import get_steam_path
+        from src.utils.vdf_parser import VDFManager
+        from src.config.slssteam import SLSsteamConfigManager
+
+        steam_path = get_steam_path()
+        vdf_mgr = VDFManager(steam_path) if steam_path else None
+        sls_manager = SLSsteamConfigManager()
+        if app_id:
+            sls_manager.add_additional_app(app_id)
+
+        depots = {}
+
+        # Parse addappid(depot_id, type, "key")
+        for match in re.finditer(r'addappid\((\d+),\s*\d+,\s*"([a-fA-F0-9]+)"\)', lua_content):
+            d_id, key = int(match.group(1)), match.group(2)
+            if d_id not in depots: depots[d_id] = {}
+            depots[d_id]["decryption_key"] = key
+            if vdf_mgr:
+                try: vdf_mgr.add_depot_key(d_id, key)
+                except: pass
+
+        # Parse setManifestid(depot_id, "manifest_id", ...)
+        for match in re.finditer(r'setManifestid\((\d+),\s*"(\d+)"', lua_content):
+            d_id, m_id = int(match.group(1)), match.group(2)
+            if d_id not in depots: depots[d_id] = {}
+            depots[d_id]["manifest_id"] = m_id
+            sls_manager.set_manifest_id(d_id, m_id)
+
+        sls_manager.save()
+        return [{"depot_id": k, "decryption_key": v.get("decryption_key"), "manifest_id": v.get("manifest_id")} for k, v in depots.items()]
+
 
     @staticmethod
-    async def prepare_game_data(app_id: int) -> list:
+    async def prepare_game_data(app_id: int, scope: str = "full") -> list:
         """
-        Downloads the Hubcap ZIP, extracts .manifest files to Steam depotcache,
-        parses the .lua file for decryption keys, injects them into config.vdf,
-        and adds the game to SLSsteam config.yaml.
+        Downloads the Hubcap game data.
+        If scope is 'full', downloads ZIP and extracts manifests.
+        If scope is 'basegame' or 'dlc', downloads only the relevant LUA file (saves quota/space).
         Returns a list of depot dictionaries for DDMod fallback.
         """
         from src.api.hubcap import hubcap_api
-        zip_bytes = await hubcap_api.get_app_manifest_zip(app_id)
-        return DownloadManager.process_zip_bytes(zip_bytes, app_id)
+        
+        if scope == "full":
+            zip_bytes = await hubcap_api.get_app_manifest_zip(app_id)
+            return DownloadManager.process_zip_bytes(zip_bytes, app_id)
+        else:
+            lua_bytes = await hubcap_api.get_app_lua(app_id, section=scope)
+            lua_content = lua_bytes.decode('utf-8', errors='ignore')
+            return DownloadManager.process_lua_content(lua_content, app_id)
 
     @staticmethod
     def install_local_zip(file_path: str) -> None:

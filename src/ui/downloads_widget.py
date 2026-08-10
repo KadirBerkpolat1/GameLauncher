@@ -36,6 +36,18 @@ class DownloadsWidget(QWidget):
         action_bar = QWidget()
         action_layout = QHBoxLayout(action_bar)
         action_layout.setContentsMargins(0, 0, 0, 0)
+        from PySide6.QtWidgets import QComboBox
+        self.combo_scope = QComboBox()
+        self.combo_scope.addItems(["Full Game (Base + DLCs)", "Base Game Only", "DLCs Only"])
+        self.combo_scope.setStyleSheet("""
+            QComboBox {
+                background-color: #21262D;
+                color: #C9D1D9;
+                border: 1px solid #30363D;
+                border-radius: 6px;
+                padding: 6px 12px;
+            }
+        """)
 
         self.btn_download_all = QPushButton("Install All Queued")
         self.btn_download_all.setProperty("cssClass", "PrimaryAction")
@@ -44,8 +56,8 @@ class DownloadsWidget(QWidget):
         self.btn_clear_history = QPushButton("Clear History")
         self.btn_clear_history.setProperty("cssClass", "SecondaryAction")
         # self.btn_clear_history.clicked.connect(self._clear_history)
-
         action_layout.addWidget(self.btn_download_all)
+        action_layout.addWidget(self.combo_scope)
         action_layout.addStretch()
         action_layout.addWidget(self.btn_clear_history)
         layout.addWidget(action_bar)
@@ -159,6 +171,17 @@ class DownloadsWidget(QWidget):
             from src.services.download import DownloadManager
             download_method = SettingsManager.get("download_method", "steam")
             
+            scope_idx = self.combo_scope.currentIndex()
+            scope = "full"
+            if scope_idx == 1:
+                scope = "basegame"
+            elif scope_idx == 2:
+                scope = "dlc"
+                
+            if download_method != "ddmod" and scope != "full":
+                print("Warning: Scoped downloads (Base/DLC) require DDMod. Defaulting to Full Game for Steam protocol.")
+                scope = "full"
+
             remaining_queue = list(queued)
 
             for game in queued:
@@ -171,8 +194,8 @@ class DownloadsWidget(QWidget):
                 self.load_queue()
                 
                 try:
-                    # Extracts manifests to depotcache, injects VDF keys, updates config.yaml
-                    depots = await DownloadManager.prepare_game_data(app_id)
+                    # Extracts manifests if 'full' scope, otherwise gets specific LUA
+                    depots = await DownloadManager.prepare_game_data(app_id, scope=scope)
                     if download_method == "ddmod":
                         self.active_scroll.show()
                         dl_widget = ActiveDownloadWidget(app_id, title)
