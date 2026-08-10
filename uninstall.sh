@@ -22,14 +22,28 @@ ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
 CONFIG_DIR="$HOME/.config/GameLauncher"
 SLS_DIR="$HOME/.local/share/SLSsteam"
 
+# ── Yardımcı: onay sorusu ──
+# curl | bash ile çalışırken stdin borudur; o zaman /dev/tty'den okur.
+# TTY yoksa (otomatik/CI) varsayılan "hayır" döner.
+ask() {
+    local prompt="$1"
+    if [ -t 0 ]; then
+        read -rp "$prompt" REPLY
+    elif [ -e /dev/tty ]; then
+        read -rp "$prompt" REPLY < /dev/tty
+    else
+        REPLY=""
+    fi
+}
+
 echo -e "${CYAN}╔══════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║      $APP_NAME - Kaldırma Betiği      ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════╝${NC}"
 echo
 
 # ── Onay ──
-read -rp "$APP_NAME kaldırılacak. Emin misiniz? [e/H]: " CONFIRM
-if [[ ! "$CONFIRM" =~ ^[eEyY]$ ]]; then
+ask "$APP_NAME kaldırılacak. Emin misiniz? [e/H]: "
+if [[ ! "$REPLY" =~ ^[eEyY]$ ]]; then
     echo "İptal edildi."
     exit 0
 fi
@@ -73,8 +87,8 @@ fi
 # ── 4. Uygulama ayarları + DDMod ──
 echo -e "${YELLOW}[4/6]${NC} Uygulama ayarları ve DDMod kurulumu..."
 if [ -d "$CONFIG_DIR" ]; then
-    read -rp "  Uygulama ayarlarını da silmek ister misiniz? ($CONFIG_DIR) [e/H]: " DEL_CONFIG
-    if [[ "$DEL_CONFIG" =~ ^[eEyY]$ ]]; then
+    ask "  Uygulama ayarlarını da silmek ister misiniz? ($CONFIG_DIR) [e/H]: "
+    if [[ "$REPLY" =~ ^[eEyY]$ ]]; then
         rm -rf "$CONFIG_DIR"
         echo -e "  ${GREEN}✓${NC} Ayarlar ve DDMod silindi"
     else
@@ -87,8 +101,8 @@ fi
 # ── 5. SLSsteam (opsiyonel) ──
 echo -e "${YELLOW}[5/6]${NC} SLSsteam (ayrı yazılım)..."
 if [ -d "$SLS_DIR" ]; then
-    read -rp "  SLSsteam de kaldırılsın mı? ($SLS_DIR) [e/H]: " DEL_SLS
-    if [[ "$DEL_SLS" =~ ^[eEyY]$ ]]; then
+    ask "  SLSsteam de kaldırılsın mı? ($SLS_DIR) [e/H]: "
+    if [[ "$REPLY" =~ ^[eEyY]$ ]]; then
         if [ -f "$SLS_DIR/setup.sh" ]; then
             bash "$SLS_DIR/setup.sh" uninstall 2>/dev/null || true
         fi

@@ -22,6 +22,19 @@ DESKTOP_FILE="$HOME/.local/share/applications/$BIN_NAME.desktop"
 REPO_URL="https://github.com/KadirBerkpolat1/GameLauncher"
 BRANCH="${BRANCH:-main}"
 
+# ── Yardımcı: onay sorusu ──
+# curl | bash ile çalışırken stdin borudur; o zaman /dev/tty'den okur.
+ask() {
+    local prompt="$1"
+    if [ -t 0 ]; then
+        read -rp "$prompt" REPLY
+    elif [ -e /dev/tty ]; then
+        read -rp "$prompt" REPLY < /dev/tty
+    else
+        REPLY=""
+    fi
+}
+
 echo -e "${CYAN}╔══════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║        ${APP_NAME} - Kurulum Betiği          ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════════╝${NC}"
@@ -88,8 +101,8 @@ if command -v 7z &> /dev/null || command -v 7za &> /dev/null; then
 else
     echo -e "  ${YELLOW}  ! 7z (p7zip) bulunamadı. SLSsteam kurulumu onsuz çalışmaz.${NC}"
     if command -v sudo &> /dev/null && [ -z "${NONINTERACTIVE:-}" ]; then
-        read -rp "  p7zip otomatik kurulsun mu? [e/H]: " INSTALL_7Z
-        if [[ "$INSTALL_7Z" =~ ^[eEyY]$ ]]; then
+        ask "  p7zip otomatik kurulsun mu? [e/H]: "
+        if [[ "$REPLY" =~ ^[eEyY]$ ]]; then
             if command -v pacman &> /dev/null; then
                 sudo pacman -S --needed p7zip
             elif command -v apt-get &> /dev/null; then
