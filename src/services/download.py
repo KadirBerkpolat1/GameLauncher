@@ -192,6 +192,36 @@ class DownloadManager:
         return depots
 
     @staticmethod
+    async def _get_manifest_zip_cached(app_id: int) -> bytes:
+        """Fetches the manifest ZIP, caching it on disk so re-installs of a
+        game (e.g. adding DLC later) reuse it without spending another credit.
+
+        The ZIP is tiny (~50 KB); a TTL guards against stale manifests.
+        """
+        from datetime import datetime
+        from src.api.hubcap import hubcap_api
+
+        cache_dir = Path.home() / ".cache" / "GameLauncher" / "manifests"
+        cache_file = cache_dir / f"{app_id}.zip"
+
+        try:
+            if cache_file.exists():
+                age = datetime.now().timestamp() - cache_file.stat().st_mtime
+                if age < 7 * 24 * 3600:
+                    logger.info(f"Manifest ZIP for {app_id} loaded from cache")
+                    return cache_file.read_bytes()
+        except OSError:
+            pass
+
+        zip_bytes = await hubcap_api.get_app_manifest_zip(app_id)
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_file.write_bytes(zip_bytes)
+        except OSError:
+            pass
+        return zip_bytes
+
+    @staticmethod
     async def prepare_game_data(app_id: int, scope: str = "full") -> dict:
         """
         Prepares Accela-style game data for a download.
@@ -199,14 +229,13 @@ class DownloadManager:
         Uses a SINGLE usage-counted API call: the manifest ZIP. The ZIP bundles
         the full Lua (depot keys + setManifestid + DLC info) together with the
         per-depot .manifest files, so no separate /lua request is needed
-        (Accela parity: one credit per game).
+        (Accela parity: one credit per game). The ZIP is cached on disk, so
+        later re-installs (e.g. adding DLC) cost 0 credits.
 
         Returns dict with keys: appid, game_name, installdir, buildid,
         depots {depot_id: {key, manifest_id}}, manifests, manifest_dir.
         """
-        from src.api.hubcap import hubcap_api
-
-        zip_bytes = await hubcap_api.get_app_manifest_zip(app_id)
+        zip_bytes = await DownloadManager._get_manifest_zip_cached(app_id)
         lua_content, manifest_map, manifest_dir = DownloadManager.process_zip_bytes(
             zip_bytes
         )
