@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QGridLayout, QPushButton
 from PySide6.QtCore import Qt
 from src.ui.game_card import GameCard
+from src.ui.active_download_widget import ActiveDownloadWidget
 from src.ui.flow_layout import FlowLayout
 from src.config.settings import SettingsManager
 
@@ -49,11 +50,28 @@ class DownloadsWidget(QWidget):
         action_layout.addWidget(self.btn_clear_history)
         layout.addWidget(action_bar)
 
+        # --- Active Downloads Area ---
+        active_lbl = QLabel("Active Downloads")
+        active_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #DDDDDD;")
+        layout.addWidget(active_lbl)
+        
+        self.active_downloads_container = QWidget()
+        self.active_downloads_layout = QVBoxLayout(self.active_downloads_container)
+        self.active_downloads_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        self.active_scroll = QScrollArea()
+        self.active_scroll.setWidgetResizable(True)
+        self.active_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.active_scroll.setStyleSheet("background-color: transparent;")
+        self.active_scroll.setMaximumHeight(200)
+        self.active_scroll.setWidget(self.active_downloads_container)
+        self.active_scroll.hide() # Hide initially
+        layout.addWidget(self.active_scroll)
+
         # --- Grid Area (Queue) ---
         queue_lbl = QLabel("Queued For Installation")
         queue_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #DDDDDD;")
         layout.addWidget(queue_lbl)
-
 
         # Grid Area
         self.scroll_area = QScrollArea()
@@ -140,24 +158,37 @@ class DownloadsWidget(QWidget):
         try:
             from src.services.download import DownloadManager
             download_method = SettingsManager.get("download_method", "steam")
+            
+            remaining_queue = list(queued)
 
             for game in queued:
                 app_id = game.get("app_id")
+                title = game.get("title", f"App {app_id}")
+                
+                # Remove from visual queue
+                remaining_queue.remove(game)
+                SettingsManager.set("download_queue", remaining_queue)
+                self.load_queue()
+                
                 try:
                     # Extracts manifests to depotcache, injects VDF keys, updates config.yaml
                     depots = await DownloadManager.prepare_game_data(app_id)
-
                     if download_method == "ddmod":
-                        self.btn_download_all.setText(f"Downloading {app_id} via DDMod...")
+                        self.active_scroll.show()
+                        dl_widget = ActiveDownloadWidget(app_id, title)
+                        self.active_downloads_layout.addWidget(dl_widget)
+                        
                         for depot in depots:
                             depot_id = depot.get("depot_id")
                             man_id = depot.get("manifest_id")
                             if depot_id and man_id:
                                 try:
                                     async for progress in DownloadManager.install_via_ddmod(app_id, depot_id, man_id):
-                                        print(f"[{app_id}] DDMod: {progress}")
+                                        dl_widget.update_progress(progress)
                                 except Exception as e:
+                                    dl_widget.mark_error(str(e))
                                     print(f"DDMod Error for depot {depot_id}: {e}")
+                        dl_widget.mark_complete()
                     else:
                         # Fallback to Steam protocol
                         DownloadManager.install_via_steam(app_id)
@@ -165,9 +196,6 @@ class DownloadsWidget(QWidget):
                 except Exception as e:
                     print(f"Warning: Failed to prepare game data for {app_id}: {e}")
 
-            # Clear queue
-            SettingsManager.set("download_queue", [])
-            self.load_queue()
             self.btn_download_all.setText("Download All")
             self.btn_download_all.setEnabled(True)
         except Exception as e:
