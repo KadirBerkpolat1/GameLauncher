@@ -142,6 +142,16 @@ class DepotSelectionDialog(QDialog):
             no_dlc.setStyleSheet("color: #8B949E; padding: 8px;")
             layout.addWidget(no_dlc)
 
+        # --- Extra Options ---
+        extra_group = QGroupBox("Ek Seçenekler")
+        extra_group.setStyleSheet("QGroupBox { font-weight: bold; color: #E6EDF3; border: 1px solid #30363D; border-radius: 6px; margin-top: 8px; padding: 8px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; }")
+        extra_layout = QVBoxLayout(extra_group)
+        self.onlinefix_checkbox = QCheckBox("OnlineFix Yamasını Uygula (Sadece Multiplayer Oyunlar İçin Seçin)")
+        self.onlinefix_checkbox.setStyleSheet(CHECKBOX_STYLE)
+        self.onlinefix_checkbox.setChecked(False)
+        extra_layout.addWidget(self.onlinefix_checkbox)
+        layout.addWidget(extra_group)
+
         # --- Buttons ---
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
@@ -193,3 +203,7 @@ class DepotSelectionDialog(QDialog):
             if cb.isChecked():
                 selected.extend(self.metadata["dlcs"][dlc_id]["depots"])
         return selected
+
+
+    def wants_onlinefix(self) -> bool:
+        return self.onlinefix_checkbox.isChecked()

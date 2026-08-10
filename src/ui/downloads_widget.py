@@ -180,6 +180,7 @@ class DownloadsWidget(QWidget):
                     dialog.open()
 
                     selected_depot_ids = await future
+                    apply_onlinefix = dialog.wants_onlinefix()
                     dialog.deleteLater()
 
                     if selected_depot_ids is None:
@@ -210,6 +211,7 @@ class DownloadsWidget(QWidget):
                         if d.get("manifest_id")
                     }
 
+                    game_data["apply_onlinefix"] = apply_onlinefix
                     from src.services.download_task import DownloadTask
 
                     task = DownloadTask(game_data, title)
