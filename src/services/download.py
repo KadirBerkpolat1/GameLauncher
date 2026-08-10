@@ -184,10 +184,15 @@ class DownloadManager:
         return depots
 
     @staticmethod
-    async def prepare_game_data(app_id: int, scope: str = "full") -> dict:
+    async def prepare_game_data(
+        app_id: int,
+        scope: str = "full",
+        include_manifest_zip: bool = False,
+    ) -> dict:
         """
         Prepares Accela-style game data for a download:
-        - fetches LUA (depot keys) and the manifest ZIP,
+        - fetches LUA (depot keys) — this is the single usage-counted call,
+        - optionally fetches the manifest ZIP (extra credit) only when requested,
         - extracts manifests to a temp dir,
         - fetches installdir/buildid from the Steam PICS endpoint.
 
@@ -211,8 +216,8 @@ class DownloadManager:
                 "manifest_id": entry.get("manifest_id"),
             }
 
-        manifest_dir = MANIFEST_TEMP_DIR
-        if scope == "full":
+        manifest_dir = ""
+        if scope == "full" and include_manifest_zip:
             try:
                 zip_bytes = await hubcap_api.get_app_manifest_zip(app_id)
                 manifest_map, manifest_dir = DownloadManager.process_zip_bytes(

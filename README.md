@@ -23,18 +23,20 @@
 
 ## 🚀 Installation
 
-### Prerequisites
-Make sure you have Python 3.11+ and `p7zip` installed on your system.
+### Quick install (single command)
+
+Just copy-paste this one-liner — no cloning, no manual steps. It downloads the
+repo, sets up the Python venv, installs all dependencies, and creates a desktop
+shortcut. Re-running it upgrades an existing install.
 
 ```bash
-# Arch Linux
-sudo pacman -S p7zip git python
-
-# Debian / Ubuntu
-sudo apt install p7zip-full git python3 python3-venv
+curl -fsSL https://raw.githubusercontent.com/KadirBerkpolat1/GameLauncher/main/install.sh | bash
 ```
 
-### Setup
+Prerequisites: **Python 3.11+**. `p7zip` is optional but recommended (SLSsteam
+install from the UI needs it) — the installer will offer to install it if missing.
+
+### Manual setup
 
 1. **Clone the repository:**
    ```bash
@@ -77,9 +79,16 @@ To fetch manifests and browse the store, you must provide a **HubcapDB API Key**
 If you wish to remove GameLauncher, its virtual environments, and downloaded metadata:
 
 ```bash
+# Single command (no repo needed)
+curl -fsSL https://raw.githubusercontent.com/KadirBerkpolat1/GameLauncher/main/uninstall.sh | bash
+
+# Or from a local checkout
 ./uninstall.sh
 ```
-*(Note: This does not delete the games you downloaded into your Steam library).*
+
+The script also offers to remove SLSsteam, the config/DDMod folder, desktop icon,
+and any `gamelauncher` lines from your shell profiles.
+*(Note: It does not delete the games you downloaded into your Steam library).*
 
 ## 🤝 Contributing
 Pull requests are welcome! If you find a bug or want to suggest a feature, please open an issue.
