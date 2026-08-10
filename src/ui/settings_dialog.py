@@ -4,7 +4,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit, 
                                QPushButton, QLabel, QHBoxLayout, QCheckBox, 
                                QListWidget, QStackedWidget, QWidget, QComboBox, 
-                               QGroupBox, QRadioButton, QMessageBox)
+                               QGroupBox, QRadioButton, QMessageBox, QFileDialog)
 from PySide6.QtCore import Qt
 from src.config.settings import SettingsManager
 from src.utils.paths import get_steam_path
@@ -191,9 +191,21 @@ class SettingsDialog(QDialog):
                 steam_path = str(detected)
                 SettingsManager.set("steam_path", steam_path)
 
+        steam_path_layout = QHBoxLayout()
         self.steam_path_input = QLineEdit()
         self.steam_path_input.setText(steam_path)
-        sd_layout.addRow(QLabel("Steam Installation Path:"), self.steam_path_input)
+        
+        self.btn_auto_detect = QPushButton("Auto Detect")
+        self.btn_auto_detect.clicked.connect(self._auto_detect_steam)
+        
+        self.btn_browse_steam = QPushButton("Browse")
+        self.btn_browse_steam.clicked.connect(self._browse_steam_path)
+        
+        steam_path_layout.addWidget(self.steam_path_input)
+        steam_path_layout.addWidget(self.btn_auto_detect)
+        steam_path_layout.addWidget(self.btn_browse_steam)
+        
+        sd_layout.addRow(QLabel("Steam Installation Path:"), steam_path_layout)
         
         self.downloads_folder_input = QLineEdit()
         self.downloads_folder_input.setText(SettingsManager.get("downloads_folder", ""))
@@ -211,6 +223,20 @@ class SettingsDialog(QDialog):
         
         sd_layout.addRow(self.cb_auto_install)
         sd_layout.addRow(self.cb_delete_zip)
+    def _browse_steam_path(self) -> None:
+        dir_path = QFileDialog.getExistingDirectory(self, "Select Steam Directory")
+        if dir_path:
+            self.steam_path_input.setText(dir_path)
+
+    def _auto_detect_steam(self) -> None:
+        from src.utils.paths import get_steam_path
+        path = get_steam_path()
+        if path:
+            self.steam_path_input.setText(str(path))
+            QMessageBox.information(self, "Success", f"Steam path detected:\n{path}")
+        else:
+            QMessageBox.warning(self, "Not Found", "Could not automatically detect Steam installation (Native or Flatpak).")
+
     def _setup_advanced_page(self) -> None:
         layout = QVBoxLayout(self.page_advanced)
         layout.setAlignment(Qt.AlignTop)
