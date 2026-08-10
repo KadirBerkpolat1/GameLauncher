@@ -174,7 +174,7 @@ class DownloadTask:
                     manifest_dir, f"{depot_id}_{man_id}.manifest"
                 ) if (manifest_dir and man_id) else ""
 
-                if not depot_id or not man_id:
+                if not depot_id:
                     self._current_depot_idx += 1
                     continue
 
@@ -186,8 +186,11 @@ class DownloadTask:
                 cmd.extend([
                     "-app", str(self.app_id),
                     "-depot", str(depot_id),
-                    "-manifest", str(man_id),
                 ])
+                # -manifest is optional: without it DDMod fetches the current
+                # manifest for the branch automatically.
+                if man_id:
+                    cmd.extend(["-manifest", str(man_id)])
 
                 if supports_mod and manifest_file and os.path.exists(manifest_file):
                     cmd.extend(["-manifestfile", manifest_file])

@@ -80,9 +80,14 @@ class DownloadManager:
 
     @staticmethod
     def process_zip_bytes(zip_bytes: bytes) -> tuple:
-        """Extracts .manifest files from a game ZIP.
+        """Extracts the full Lua and .manifest files from a game ZIP.
 
-        Returns (manifest_map, manifest_dir):
+        The Hubcap ZIP bundles everything needed in a single (usage-counted)
+        call: the full Lua (depot keys + setManifestid + DLC info) and the
+        per-depot .manifest files.
+
+        Returns (lua_content, manifest_map, manifest_dir):
+        - lua_content: str — the full Lua source from inside the ZIP.
         - manifest_map: dict mapping depot_id(str) -> manifest_id(str)
         - manifest_dir: temp dir where the .manifest files were written.
         Manifests are also copied into Steam's depotcache for the SLSsteam
@@ -92,6 +97,7 @@ class DownloadManager:
         from src.utils.paths import get_steam_path
 
         manifest_map = {}
+        lua_content = ""
 
         steam_path = get_steam_path()
         if steam_path:
@@ -112,8 +118,10 @@ class DownloadManager:
                     if steam_path:
                         with open(depotcache_dir / info.filename, "wb") as f:
                             f.write(content)
+                elif info.filename.endswith(".lua"):
+                    lua_content = z.read(info.filename).decode("utf-8", errors="ignore")
 
-        return manifest_map, MANIFEST_TEMP_DIR
+        return lua_content, manifest_map, MANIFEST_TEMP_DIR
 
     @staticmethod
     async def fetch_installdir_and_buildid(app_id: int) -> dict:
@@ -184,26 +192,24 @@ class DownloadManager:
         return depots
 
     @staticmethod
-    async def prepare_game_data(
-        app_id: int,
-        scope: str = "full",
-        include_manifest_zip: bool = False,
-    ) -> dict:
+    async def prepare_game_data(app_id: int, scope: str = "full") -> dict:
         """
-        Prepares Accela-style game data for a download:
-        - fetches LUA (depot keys) — this is the single usage-counted call,
-        - optionally fetches the manifest ZIP (extra credit) only when requested,
-        - extracts manifests to a temp dir,
-        - fetches installdir/buildid from the Steam PICS endpoint.
+        Prepares Accela-style game data for a download.
+
+        Uses a SINGLE usage-counted API call: the manifest ZIP. The ZIP bundles
+        the full Lua (depot keys + setManifestid + DLC info) together with the
+        per-depot .manifest files, so no separate /lua request is needed
+        (Accela parity: one credit per game).
 
         Returns dict with keys: appid, game_name, installdir, buildid,
         depots {depot_id: {key, manifest_id}}, manifests, manifest_dir.
         """
         from src.api.hubcap import hubcap_api
 
-        lua_scope = scope if scope in ["basegame", "dlc"] else "full"
-        lua_bytes = await hubcap_api.get_app_lua(app_id, section=lua_scope)
-        lua_content = lua_bytes.decode("utf-8", errors="ignore")
+        zip_bytes = await hubcap_api.get_app_manifest_zip(app_id)
+        lua_content, manifest_map, manifest_dir = DownloadManager.process_zip_bytes(
+            zip_bytes
+        )
 
         # Side effects for the SLSsteam flow (config.vdf keys, ManifestIds).
         depot_list = DownloadManager.process_lua_content(lua_content, app_id)
@@ -216,21 +222,12 @@ class DownloadManager:
                 "manifest_id": entry.get("manifest_id"),
             }
 
-        manifest_dir = ""
-        if scope == "full" and include_manifest_zip:
-            try:
-                zip_bytes = await hubcap_api.get_app_manifest_zip(app_id)
-                manifest_map, manifest_dir = DownloadManager.process_zip_bytes(
-                    zip_bytes
-                )
-                # Merge manifest IDs from ZIP filenames into depot list.
-                for depot_id, manifest_id in manifest_map.items():
-                    if depot_id not in depots:
-                        depots[depot_id] = {"key": None, "manifest_id": None}
-                    if not depots[depot_id].get("manifest_id"):
-                        depots[depot_id]["manifest_id"] = manifest_id
-            except Exception as e:
-                logger.warning(f"Failed to download/extract manifest ZIP: {e}")
+        # Merge manifest IDs from ZIP filenames into depot list (fallback).
+        for depot_id, manifest_id in manifest_map.items():
+            if depot_id not in depots:
+                depots[depot_id] = {"key": None, "manifest_id": None}
+            if not depots[depot_id].get("manifest_id"):
+                depots[depot_id]["manifest_id"] = manifest_id
 
         info = await DownloadManager.fetch_installdir_and_buildid(app_id)
 
@@ -258,7 +255,12 @@ class DownloadManager:
     def install_local_zip(file_path: str) -> None:
         with open(file_path, "rb") as f:
             zip_bytes = f.read()
-        DownloadManager.process_zip_bytes(zip_bytes)
+        lua_content, _manifest_map, _manifest_dir = DownloadManager.process_zip_bytes(zip_bytes)
+        from src.config.slssteam import SLSsteamConfigManager
+
+        sls_manager = SLSsteamConfigManager()
+        depots = DownloadManager.process_lua_content(lua_content, None)
+        _ = depots
 
     @staticmethod
     def install_local_lua(file_path: str) -> None:

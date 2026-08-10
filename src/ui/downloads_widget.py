@@ -179,23 +179,22 @@ class DownloadsWidget(QWidget):
                         print(f"User canceled installation for {app_id}")
                         return
 
-                    # Manifest'i olan depot'ları filtrele.
+                    # Seçili depot'lar geçerli: depot key'leri yeterli,
+                    # manifest ID'si yoksa DDMod güncel manifesti kendisi çeker.
                     selected_depots = {
                         d_id: d for d_id, d in depots.items()
                         if d_id in selected_depot_ids
                     }
-                    valid_depots = {
-                        d_id: d for d_id, d in selected_depots.items()
-                        if d.get("manifest_id")
-                    }
-                    if not valid_depots:
+                    if not selected_depots:
                         from PySide6.QtWidgets import QMessageBox
                         QMessageBox.warning(
                             self, "İndirme Hatası",
-                            f"{title} için geçerli depot/manifest verisi bulunamadı.\n"
+                            f"{title} için geçerli depot verisi bulunamadı.\n"
                             "Hubcap bu oyun için indirme bilgisi sunmuyor olabilir."
                         )
                         return
+
+                    valid_depots = selected_depots
 
                     game_data["depots"] = valid_depots
                     game_data["manifests"] = {
