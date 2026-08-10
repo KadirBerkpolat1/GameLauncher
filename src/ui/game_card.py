@@ -362,6 +362,32 @@ class GameCard(QFrame):
                 downloaded, str(self.app_id), target_path
             )
             used_online = True
+        except OnlineFixNotFoundError as e:
+            # Doğru fix bulunamadı: sessizce yerel şablona düşme, önce kullanıcıya sor.
+            box = QMessageBox(self)
+            box.setWindowTitle("Fix Bulunamadı")
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setText(
+                f"online-fix.me'de bu oyun için fix bulunamadı.\n\n{e}\n\n"
+                "Yerel şablondan uygulamak ister misiniz?"
+            )
+            btn_yes = box.addButton("Evet, yerel şablonu uygula", QMessageBox.ButtonRole.AcceptRole)
+            box.addButton("Hayır, iptal", QMessageBox.ButtonRole.RejectRole)
+            box.exec()
+            if box.clickedButton() is not btn_yes:
+                return
+            try:
+                OnlineFixPatcher.apply_patch(self.app_id, target_path)
+                QMessageBox.information(
+                    self, "Yerel Şablon Uygulandı",
+                    f"Fix bulunamadı; yerel şablon uygulandı.\n\nKlasör: {target_path}",
+                )
+            except Exception as local_err:
+                QMessageBox.critical(
+                    self, "Hata",
+                    f"Yerel şablon uygulanamadı: {local_err}",
+                )
+                return
         except OnlineFixError as e:
             self.btn_apply_fix.setText("Yerel şablondan uygulanıyor...")
             try:
