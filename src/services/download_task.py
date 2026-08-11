@@ -1,8 +1,11 @@
 import asyncio
 import os
+import re
 import tempfile
+import time
 from pathlib import Path
 from src.config.settings import SettingsManager
+from src.utils.manifest import parse_manifest
 
 class DownloadTask:
     """
@@ -19,9 +22,11 @@ class DownloadTask:
         self.title = title
         self.game_data = game_data
         self.depots = game_data.get("depots", {})
+        self._ordered_depot_ids = sorted(self.depots, key=lambda d: int(d))
         self.is_paused = False
         self.is_canceled = False
         self.current_process = None
+        self._speed_state = None
         self._current_depot_idx = 0
         self.download_dir = None
         self.steamapps_dir = None
@@ -170,10 +175,23 @@ class DownloadTask:
                 manifest_file = os.path.join(
                     manifest_dir, f"{depot_id}_{man_id}.manifest"
                 ) if (manifest_dir and man_id) else ""
-
                 if not depot_id:
                     self._current_depot_idx += 1
                     continue
+
+                self._speed_state = None
+                if manifest_file and os.path.exists(manifest_file):
+                    sizes = parse_manifest(manifest_file)
+                    if sizes:
+                        # DDMod prints forward slashes; manifest keys use backslashes.
+                        sizes = {k.replace("\\", "/"): v for k, v in sizes.items()}
+                        self._speed_state = {
+                            "sizes": sizes,
+                            "seen": set(),
+                            "bytes": 0,
+                            "time": time.monotonic(),
+                            "ema": None,
+                        }
 
                 if is_dll:
                     cmd = ["dotnet", str(ddmod_path)]
@@ -208,11 +226,6 @@ class DownloadTask:
                     )
 
                     while not self.current_process.stdout.at_eof():
-                        if self.is_canceled or self.is_paused:
-                            if self.current_process.returncode is None:
-                                self.current_process.terminate()
-                            await self.current_process.wait()
-                            break
 
                         try:
                             line = await asyncio.wait_for(
@@ -221,7 +234,7 @@ class DownloadTask:
                             if line and progress_callback:
                                 decoded_line = line.decode("utf-8", errors="replace").strip()
                                 if decoded_line:
-                                    progress_callback(decoded_line)
+                                    progress_callback(self._enrich_with_speed(decoded_line))
                         except asyncio.TimeoutError:
                             continue
                         except Exception as e:
@@ -257,6 +270,33 @@ class DownloadTask:
                     os.unlink(keys_file_path)
                 except OSError:
                     pass
+
+    def _enrich_with_speed(self, line: str) -> str:
+        """Appends ' (x.x MB/s)' to DDMod progress lines derived from manifest sizes."""
+        st = self._speed_state
+        if not st:
+            return line
+        m = re.match(r"^\s*[\d.]+%\s+(.+?)\s*$", line)
+        if not m:
+            return line
+        rel = m.group(1).replace("\\", "/")
+        if self.download_dir:
+            prefix = str(self.download_dir).replace("\\", "/")
+            if rel.startswith(prefix):
+                rel = rel[len(prefix):].lstrip("/")
+        size = st["sizes"].get(rel)
+        if size is not None and rel not in st["seen"]:
+            st["seen"].add(rel)
+            st["bytes"] += size
+        now = time.monotonic()
+        dt = now - st["time"]
+        if dt >= 1.0 and st["bytes"] > 0:
+            instant = st["bytes"] / dt / 1_000_000.0
+            st["ema"] = instant if st["ema"] is None else st["ema"] * 0.6 + instant * 0.4
+            st["time"] = now
+            st["bytes"] = 0
+            return f"{line}  ({st['ema']:.1f} MB/s)"
+        return line
 
     def _post_download_steps(self):
         """Wires the downloaded files into Steam: ACF, depotcache, SLSsteam config."""
