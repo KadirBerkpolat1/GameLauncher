@@ -23,9 +23,33 @@ class DownloadTask:
         self.is_canceled = False
         self.current_process = None
         self._current_depot_idx = 0
-        self._ordered_depot_ids = list(self.depots.keys())
         self.download_dir = None
         self.steamapps_dir = None
+        self.used_fallback = False
+
+
+    def _resolve_target_dir(self) -> str:
+        """Picks the Steam library target: <library>/steamapps/common/<installdir>."""
+        from src.utils.paths import get_steam_libraries
+
+        installdir = self.game_data.get("installdir")
+        libraries = get_steam_libraries()
+
+        if libraries and installdir:
+            library = libraries[0]
+            self.steamapps_dir = os.path.join(library, "steamapps")
+            target = os.path.join(
+                self.steamapps_dir, "common", installdir
+            )
+            os.makedirs(target, exist_ok=True)
+            return target
+
+        # Fallback: plain download folder (game will not be wired into Steam).
+        self.used_fallback = True
+        downloads_folder = SettingsManager.get(
+            "downloads_folder", str(Path.home() / "Downloads")
+        )
+        return downloads_folder or str(Path.home() / "Downloads")
 
     async def _supports_mod_flags(self, ddmod_path: Path) -> bool:
         """Detects whether the binary supports -depotkeys/-manifestfile (modded fork)."""
@@ -62,27 +86,6 @@ class DownloadTask:
         if self.current_process and self.current_process.returncode is None:
             self.current_process.terminate()
 
-    def _resolve_target_dir(self) -> str:
-        """Picks the Steam library target: <library>/steamapps/common/<installdir>."""
-        from src.utils.paths import get_steam_libraries
-
-        installdir = self.game_data.get("installdir")
-        libraries = get_steam_libraries()
-
-        if libraries and installdir:
-            library = libraries[0]
-            self.steamapps_dir = os.path.join(library, "steamapps")
-            target = os.path.join(
-                self.steamapps_dir, "common", installdir
-            )
-            os.makedirs(target, exist_ok=True)
-            return target
-
-        # Fallback: plain download folder (game will not be wired into Steam).
-        downloads_folder = SettingsManager.get(
-            "downloads_folder", str(Path.home() / "Downloads")
-        )
-        return downloads_folder or str(Path.home() / "Downloads")
 
     async def _write_keys_file(self) -> str:
         """Writes '<depot_id>;<hexkey>' lines to a temp keys file."""
@@ -118,8 +121,6 @@ class DownloadTask:
 
         is_dll = ddmod_path_str.lower().endswith(".dll")
 
-        steam_username = SettingsManager.get("steam_username", "")
-        steam_password = SettingsManager.get("steam_password", "")
 
         # Target: Steam library steamapps/common/<installdir> (Accela-style).
         self.download_dir = self._resolve_target_dir()
@@ -129,6 +130,12 @@ class DownloadTask:
                     "Steam kütüphanesi bulunamadı. Lütfen Settings'te Steam yolunu ayarlayın."
                 )
             return
+        if self.used_fallback and progress_callback:
+            progress_callback(
+                "⚠ UYARI: Steam kütüphanesi bulunamadı! Oyun Downloads klasörüne "
+                "inecek ve Steam'e otomatik bağlanmayacak. Settings → Steam & "
+                "Downloads'tan Steam yolunu ayarlayın."
+            )
         if progress_callback:
             progress_callback(f"--- Hedef dizin: {self.download_dir} ---")
 
@@ -188,8 +195,6 @@ class DownloadTask:
                 if keys_file_path:
                     cmd.extend(["-depotkeys", keys_file_path])
 
-                if steam_username and steam_password:
-                    cmd.extend(["-username", steam_username, "-password", steam_password])
 
                 cmd.extend(["-max-downloads", "25"])
                 cmd.extend(["-dir", self.download_dir])

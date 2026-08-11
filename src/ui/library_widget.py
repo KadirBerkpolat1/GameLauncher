@@ -25,9 +25,10 @@ class LibraryWidget(QWidget):
         # --- Header & Stats ---
         header_layout = QHBoxLayout()
         header = QLabel("My Library")
-        header.setStyleSheet("font-size: 24px; font-weight: bold; color: #FFFFFF;")
+        header.setProperty("cssClass", "HeaderTitle")
         self.lbl_stats = QLabel("0 Lua, 0 Steam, 0 GB Size")
-        self.lbl_stats.setStyleSheet("color: #777777; font-size: 14px; margin-left: 20px;")
+        self.lbl_stats.setProperty("cssClass", "GameSubtitle")
+        self.lbl_stats.setStyleSheet("margin-left: 20px;") # keep just the margin if needed, or rely on layout
         header_layout.addWidget(header)
         header_layout.addWidget(self.lbl_stats)
         header_layout.addStretch()
@@ -36,12 +37,16 @@ class LibraryWidget(QWidget):
         # --- Action Toolbar ---
         action_bar = QHBoxLayout()
         self.btn_refresh = QPushButton("Refresh")
+        self.btn_refresh.setProperty("cssClass", "SecondaryAction")
         self.btn_refresh.clicked.connect(self.load_library)
         self.btn_refresh_cache = QPushButton("Refresh Cache")
+        self.btn_refresh_cache.setProperty("cssClass", "SecondaryAction")
         self.btn_refresh_cache.clicked.connect(self._refresh_cache)
         self.btn_toggle_updates = QPushButton("Toggle Updates")
+        self.btn_toggle_updates.setProperty("cssClass", "SecondaryAction")
         self.btn_toggle_updates.clicked.connect(self._toggle_updates)
         self.btn_export_luas = QPushButton("Export Luas")
+        self.btn_export_luas.setProperty("cssClass", "SecondaryAction")
         self.btn_export_luas.clicked.connect(self._export_luas)
         self.btn_restart_steam = QPushButton("Restart Steam")
         self.btn_restart_steam.setProperty("cssClass", "PrimaryAction")
@@ -68,7 +73,9 @@ class LibraryWidget(QWidget):
         self.combo_sort.addItems(["Sort: Name", "Sort: Size", "Sort: Recent"])
 
         self.btn_list_view = QPushButton("List View")
+        self.btn_list_view.setProperty("cssClass", "SecondaryAction")
         self.btn_select_mode = QPushButton("Select Mode")
+        self.btn_select_mode.setProperty("cssClass", "SecondaryAction")
 
         filters_bar.addWidget(self.search_input)
         filters_bar.addWidget(self.combo_category)
@@ -90,7 +97,7 @@ class LibraryWidget(QWidget):
 
         # Empty state label
         self.empty_label = QLabel("Your library is empty. Go to Search to add games.")
-        self.empty_label.setStyleSheet("color: #777777; font-size: 16px;")
+        self.empty_label.setProperty("cssClass", "GameSubtitle")
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.grid_layout.addWidget(self.empty_label)
 

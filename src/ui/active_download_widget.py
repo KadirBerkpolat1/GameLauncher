@@ -17,14 +17,8 @@ class ActiveDownloadWidget(QFrame):
         self.init_ui()
 
     def init_ui(self):
-        self.setObjectName("ActiveDownloadFrame")
-        self.setStyleSheet("""
-            #ActiveDownloadFrame {
-                background-color: #161B22;
-                border: 1px solid #30363D;
-                border-radius: 8px;
-            }
-        """)
+        self.setProperty("cssClass", "GameCard")
+        
         
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(15, 15, 15, 15)
@@ -35,9 +29,9 @@ class ActiveDownloadWidget(QFrame):
         title_layout.setSpacing(5)
         
         lbl_title = QLabel(self.title)
-        lbl_title.setStyleSheet("color: #FFFFFF; font-size: 16px; font-weight: bold;")
+        lbl_title.setProperty("cssClass", "GameTitle")
         lbl_appid = QLabel(f"App ID: {self.app_id}")
-        lbl_appid.setStyleSheet("color: #8B949E; font-size: 12px;")
+        lbl_appid.setProperty("cssClass", "GameSubtitle")
         
         title_layout.addWidget(lbl_title)
         title_layout.addWidget(lbl_appid)
@@ -54,20 +48,9 @@ class ActiveDownloadWidget(QFrame):
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
         self.progress_bar.setFixedHeight(12)
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: none;
-                border-radius: 6px;
-                background-color: #21262D;
-            }
-            QProgressBar::chunk {
-                background-color: #238636;
-                border-radius: 6px;
-            }
-        """)
         
         self.lbl_status = QLabel("Starting download...")
-        self.lbl_status.setStyleSheet("color: #8B949E; font-size: 12px;")
+        self.lbl_status.setProperty("cssClass", "GameSubtitle")
         
         progress_layout.addStretch()
         progress_layout.addWidget(self.progress_bar)
@@ -81,28 +64,25 @@ class ActiveDownloadWidget(QFrame):
         controls_layout.setSpacing(5)
         
         self.lbl_speed = QLabel("-- MB/s")
-        self.lbl_speed.setStyleSheet("color: #58A6FF; font-size: 14px; font-weight: bold;")
+        self.lbl_speed.setStyleSheet("color: #6366F1; font-size: 14px; font-weight: bold;")
         self.lbl_speed.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
         btns_layout = QHBoxLayout()
         btns_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
         
         self.btn_pause = QPushButton("Pause")
-        self.btn_pause.setFixedWidth(70)
         self.btn_pause.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_pause.setStyleSheet("background-color: #21262D; color: #FFFFFF; border: 1px solid #30363D; border-radius: 4px; padding: 4px;")
+        self.btn_pause.setProperty("cssClass", "SecondaryAction")
         self.btn_pause.clicked.connect(self._toggle_pause)
         
         self.btn_cancel = QPushButton("Cancel")
-        self.btn_cancel.setFixedWidth(70)
         self.btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_cancel.setStyleSheet("background-color: #DA3633; color: #FFFFFF; border: none; border-radius: 4px; padding: 4px;")
+        self.btn_cancel.setProperty("cssClass", "DangerAction")
         self.btn_cancel.clicked.connect(self._cancel_download)
 
         self.btn_complete = QPushButton("Completed")
-        self.btn_complete.setFixedWidth(90)
         self.btn_complete.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_complete.setStyleSheet("background-color: #238636; color: #FFFFFF; border: none; border-radius: 4px; padding: 4px;")
+        self.btn_complete.setProperty("cssClass", "FixAction")
         self.btn_complete.hide()
         self.btn_complete.clicked.connect(self.closed)
 
@@ -118,13 +98,14 @@ class ActiveDownloadWidget(QFrame):
     def _toggle_pause(self):
         if self.task.is_paused:
             self.task.resume()
+            self.lbl_status.setStyleSheet("") # Clear any inline styles to let cssClass work
             self.btn_pause.setText("Pause")
             self.lbl_status.setText("Resuming download...")
             self.lbl_status.setStyleSheet("color: #8B949E; font-size: 12px;")
         else:
             self.task.pause()
             self.btn_pause.setText("Resume")
-            self.lbl_status.setText("Paused")
+            self.lbl_status.setStyleSheet("text-decoration: line-through;") # It's paused
             self.lbl_status.setStyleSheet("color: #D2A8FF; font-size: 12px; font-weight: bold;")
             self.lbl_speed.setText("-- MB/s")
 
@@ -139,7 +120,7 @@ class ActiveDownloadWidget(QFrame):
         self.task.cancel()
         self._show_close_button()
         self.lbl_status.setText("Canceled")
-        self.lbl_status.setStyleSheet("color: #8B949E; font-size: 12px; text-decoration: line-through;")
+        self.lbl_status.setStyleSheet("text-decoration: line-through;")
         self.lbl_speed.setText("")
 
     def update_progress(self, line: str):
@@ -157,15 +138,24 @@ class ActiveDownloadWidget(QFrame):
             except ValueError:
                 pass
 
-        # Try to parse speed (e.g. 1.2 MB/s, 500 KB/s)
-        speed_match = re.search(r'(\d+(?:\.\d+)?\s*[KMG]B/s)', line, re.IGNORECASE)
+        # Try to parse speed — DDMod prints IEC units (MiB/s, KiB/s, GiB/s)
+        # and SI units (MB/s, KB/s, GB/s).
+        speed_match = re.search(
+            r'(\d+(?:\.\d+)?\s*[KMG]i?B/s)', line, re.IGNORECASE
+        )
         if speed_match:
-            self.lbl_speed.setText(speed_match.group(1))
+            self.lbl_speed.setText(speed_match.group(1).strip())
 
-        # Optionally update status with raw line if it doesn't look like a pure progress bar frame
-        # to show what is happening (e.g., "Logging into Steam...", "Downloading depot...")
-        # DepotDownloader prints a lot of percentage lines. If there's no percentage, it might be a status line.
-        if not pct_match and not speed_match and line.strip():
+        bps_match = None
+        if not speed_match:
+            # Fallback: bare bytes/s (e.g. "at 850123 B/s")
+            bps_match = re.search(
+                r'(\d+(?:\.\d+)?)\s*B/s\b', line, re.IGNORECASE
+            )
+            if bps_match:
+                self.lbl_speed.setText(bps_match.group(1) + " B/s")
+
+        if not pct_match and not speed_match and not bps_match and line.strip():
             # filter out very long lines or debug noise if necessary
             if len(line) < 100:
                 self.lbl_status.setText(line.strip())

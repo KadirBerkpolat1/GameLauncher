@@ -92,10 +92,13 @@ class SearchWidget(QWidget):
         filters_bar.addStretch()
         
         self.btn_load = QPushButton("Load")
+        self.btn_load.setProperty("cssClass", "SecondaryAction")
         self.btn_load.clicked.connect(self._load_library)
         self.btn_select_mode = QPushButton("Select Mode")
+        self.btn_select_mode.setProperty("cssClass", "SecondaryAction")
         self.btn_select_mode.clicked.connect(self._toggle_select_mode)
         self.btn_list_view = QPushButton("List View")
+        self.btn_list_view.setProperty("cssClass", "SecondaryAction")
         self.btn_list_view.clicked.connect(self._toggle_list_view)
         
         filters_bar.addWidget(self.btn_load)
@@ -116,7 +119,7 @@ class SearchWidget(QWidget):
 
         # Status Label
         self.status_label = QLabel("Type at least 3 characters to search.")
-        self.status_label.setStyleSheet("color: #777777; font-size: 16px;")
+        self.status_label.setProperty("cssClass", "GameSubtitle")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.results_layout.addWidget(self.status_label)
 
@@ -126,13 +129,16 @@ class SearchWidget(QWidget):
         # --- Pagination Bar ---
         pagination_bar = QHBoxLayout()
         self.btn_prev = QPushButton("Prev")
+        self.btn_prev.setProperty("cssClass", "SecondaryAction")
         self.btn_next = QPushButton("Next")
+        self.btn_next.setProperty("cssClass", "SecondaryAction")
         self.lbl_page = QLabel("Page 1 of 7717")
         
         self.goto_input = QSpinBox()
         self.goto_input.setMinimum(1)
         self.goto_input.setMaximum(7717)
         self.btn_go = QPushButton("Go")
+        self.btn_go.setProperty("cssClass", "SecondaryAction")
         
         pagination_bar.addStretch()
         pagination_bar.addWidget(self.btn_prev)

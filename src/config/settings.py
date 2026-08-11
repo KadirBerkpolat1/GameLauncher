@@ -19,8 +19,6 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "disable_os_filter": False,
     "steamtools_mode": False,
     "auto_upload_keys": True,
-    "steam_username": "",
-    "steam_password": "",
     "download_history": [],
     "theme": "dark",
     "profiles": {

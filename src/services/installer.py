@@ -68,12 +68,6 @@ class DDModInstaller:
         from src.config.settings import SettingsManager
         SettingsManager.set("depotdownloadermod_path", "")
 
-    @classmethod
-    async def uninstall_ddmod(cls) -> None:
-        if cls.INSTALL_DIR.exists():
-            shutil.rmtree(cls.INSTALL_DIR)
-        from src.config.settings import SettingsManager
-        SettingsManager.set("depotdownloadermod_path", "")
 
 class SLSsteamInstaller:
     """

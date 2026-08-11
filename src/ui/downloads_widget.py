@@ -23,11 +23,12 @@ class DownloadsWidget(QWidget):
         # --- Header ---
         header_layout = QVBoxLayout()
         header = QLabel("Active Downloads")
-        header.setStyleSheet("font-size: 24px; font-weight: bold; color: #FFFFFF;")
+        header.setProperty("cssClass", "HeaderTitle")
         
         # Status Indicator
         self.lbl_status = QLabel("Status: Idle")
-        self.lbl_status.setStyleSheet("color: #58A6FF; font-weight: bold; font-size: 14px;")
+        self.lbl_status.setProperty("cssClass", "GameSubtitle")
+        self.lbl_status.setStyleSheet("color: #6366F1; font-weight: bold;")
         
         header_layout.addWidget(header)
         header_layout.addWidget(self.lbl_status)
@@ -62,13 +63,14 @@ class DownloadsWidget(QWidget):
 
         # --- History Area ---
         history_lbl = QLabel("Download History")
-        history_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #DDDDDD; margin-top: 15px;")
+        history_lbl.setProperty("cssClass", "GameTitle")
+        history_lbl.setStyleSheet("margin-top: 15px;")
         layout.addWidget(history_lbl)
 
         self.history_scroll = QScrollArea()
         self.history_scroll.setWidgetResizable(True)
         self.history_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        self.history_scroll.setStyleSheet("background-color: transparent; border: 1px solid #30363D; border-radius: 8px;")
+        self.history_scroll.setStyleSheet("background-color: transparent; border: 1px solid #1E212B; border-radius: 8px;")
         self.history_scroll.setMaximumHeight(150)
 
         self.history_container = QWidget()
@@ -91,14 +93,14 @@ class DownloadsWidget(QWidget):
                 w.deleteLater()
         if not history:
             empty = QLabel("No downloads yet.")
-            empty.setStyleSheet("color: #888888;")
+            empty.setProperty("cssClass", "GameSubtitle")
             self.history_layout.addWidget(empty)
             return
         for entry in reversed(history[-20:]):
             status = entry.get("status", "Completed")
             icon = "✓" if status == "Completed" else "✗"
             item = QLabel(f"{icon} {entry.get('title', '')} - {status} ({entry.get('date', '')})")
-            item.setStyleSheet("color: #888888;")
+            item.setProperty("cssClass", "GameSubtitle")
             self.history_layout.addWidget(item)
 
     def _remove_active_widget(self, widget) -> None:

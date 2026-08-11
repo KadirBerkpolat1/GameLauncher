@@ -242,28 +242,6 @@ class SettingsDialog(QDialog):
         sd_layout.addRow(self.cb_delete_zip)
         sd_layout.addRow(self.cb_os_filter)
 
-        # Steam credentials for DDMod (ücretli oyunlar için)
-        creds_group = QGroupBox("Steam Hesabı (DDMod için gerekli)")
-        creds_group.setStyleSheet("QGroupBox { border: 1px solid #333; border-radius: 6px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px; }")
-        creds_layout = QFormLayout(creds_group)
-
-        self.steam_username_input = QLineEdit()
-        self.steam_username_input.setText(SettingsManager.get("steam_username", ""))
-        self.steam_username_input.setPlaceholderText("Steam kullanıcı adınız")
-        creds_layout.addRow(QLabel("Kullanıcı Adı:"), self.steam_username_input)
-
-        self.steam_password_input = QLineEdit()
-        self.steam_password_input.setText(SettingsManager.get("steam_password", ""))
-        self.steam_password_input.setPlaceholderText("Steam şifreniz")
-        self.steam_password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        creds_layout.addRow(QLabel("Şifre:"), self.steam_password_input)
-
-        note = QLabel("⚠ Şifre yerel olarak şifresiz saklanır. Sadece ücretli oyunlar için gereklidir.")
-        note.setStyleSheet("color: #8B949E; font-size: 11px;")
-        note.setWordWrap(True)
-        creds_layout.addRow(note)
-
-        sd_layout.addRow(creds_group)
     def _browse_steam_path(self) -> None:
         dir_path = QFileDialog.getExistingDirectory(self, "Select Steam Directory")
         if dir_path:
@@ -455,10 +433,9 @@ class SettingsDialog(QDialog):
         SettingsManager.set("auto_install", self.cb_auto_install.isChecked())
         SettingsManager.set("delete_zip", self.cb_delete_zip.isChecked())
         SettingsManager.set("disable_os_filter", self.cb_os_filter.isChecked())
-        SettingsManager.set("steam_username", self.steam_username_input.text().strip())
-        SettingsManager.set("steam_password", self.steam_password_input.text())
-        
+
         # DepotDownloader mode check
+
         if self.radio_dd.isChecked():
             SettingsManager.set("download_method", "ddmod")
         else:

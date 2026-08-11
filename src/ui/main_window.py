@@ -37,8 +37,8 @@ class MainWindow(QMainWindow):
         sidebar_layout.setSpacing(5)
 
         # Profile / Logo area placeholder
-        logo_label = QLabel("<h2><span style='color: #8A2387;'>✦</span> NEBULA</h2>")
-        logo_label.setStyleSheet("color: #FFFFFF; font-weight: 900; padding-left: 15px; padding-bottom: 20px; letter-spacing: 2px;")
+        logo_label = QLabel("<h2><span style='color: #6366F1;'>✦</span> NEBULA</h2>")
+        logo_label.setStyleSheet("color: #F8FAFC; font-weight: 900; padding-left: 12px; padding-bottom: 24px; padding-top: 10px; letter-spacing: 3px; font-size: 16px;")
         logo_label.setTextFormat(Qt.TextFormat.RichText)
         sidebar_layout.addWidget(logo_label)
 
@@ -78,18 +78,19 @@ class MainWindow(QMainWindow):
         self.btn_restart_steam.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_restart_steam.setStyleSheet("""
             QPushButton {
-                background-color: #2A475E;
-                color: #FFFFFF;
-                border: 1px solid #3B6B8E;
-                border-radius: 6px;
-                padding: 10px 15px;
-                margin: 4px 10px;
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1E293B, stop:1 #334155);
+                color: #F8FAFC;
+                border: 1px solid #475569;
+                border-radius: 8px;
+                padding: 12px 15px;
+                margin: 4px 12px;
                 font-weight: bold;
                 text-align: center;
+                letter-spacing: 0.5px;
             }
             QPushButton:hover {
-                background-color: #3B6B8E;
-                border: 1px solid #66C0F4;
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #334155, stop:1 #475569);
+                border: 1px solid #94A3B8;
             }
         """)
         self.btn_restart_steam.clicked.connect(self._restart_steam)
