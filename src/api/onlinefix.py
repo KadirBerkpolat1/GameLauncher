@@ -18,6 +18,7 @@ import html
 import json
 import logging
 import re
+import asyncio
 from typing import Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, urlparse
 
@@ -51,6 +52,27 @@ _SEARCH_ITEM_RE = re.compile(
 )
 _HOSTER_LINK_RE = re.compile(r'href="(https://hosters\.online-fix\.me:2053/[^"]+)"')
 _GAME_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.S)
+
+
+def _normalize(s: str) -> str:
+    """Arama/karsilastirma icin sadece alfanumerik karakterler birakir."""
+    return re.sub(r"[\W_]+", "", s.lower())
+
+
+def _search_match(query: str, url: str, title: str) -> bool:
+    """
+    Sorgu kelimelerinin tamaminin slug veya baslik kelimelerinde gecip
+    gecmedigini kontrol eder. Boylece DLE'nin alakasiz sonuclari ("R.E.P.O."
+    icin "report" iceren oyunlar gibi) elenir, cok kelimeli oyun adlari
+    ("Hollow Knight") ise bulunur.
+    """
+    q_words = [_normalize(w) for w in query.split()]
+    q_words = [w for w in q_words if w]
+    if not q_words:
+        return False
+    slug_words = {_normalize(w) for w in url.rsplit("/", 1)[-1].replace(".html", "").split("-")}
+    title_words = {_normalize(w) for w in re.split(r"[\W_]+", html.unescape(title))}
+    return all(w in slug_words or w in title_words for w in q_words)
 
 
 class OnlineFixError(Exception):
@@ -101,30 +123,51 @@ class OnlineFixClient:
                 ...
             ]
 
-        Slug'ta sorgu gecen sonuclar one alinir; boylece ilk sonuc buyuk
-        olasilikla istenen oyundur (arayuzde kullanici secimi yine de yapilir).
+        DLE noktali sorgularda ("R.E.P.O." gibi) alakasiz sonuclar doner ve
+        arama buyuk/kucuk harfe duyarlidir; bu yuzden oncelikle ham sorgu
+        gonderilir, sonuclar _search_match ile slug/baslik uzerinden filtrelenir.
+        Ilk deneme sonucsuz kalirsa normalize (temiz) sorgu ile bir kez daha denenir.
         """
-        url = SEARCH_URL.format(query=quote(query))
-        client = self._get_client()
-        try:
-            resp = await client.get(url, headers={"Referer": ONLINEFIX_BASE + "/"})
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            raise OnlineFixError(f"Search failed HTTP {e.response.status_code}") from e
-        except httpx.RequestError as e:
-            raise OnlineFixError(f"Search network error: {e}") from e
+        # DLE buyuk/kucuk harfe duyarlidir ve noktali sorgulari ("R.E.P.O.")
+        # cozemediginde sonuclari bos gosterir; temiz buyuk harf sorgu
+        # ("REPO") ise dogru sonucu bulur. Site ardisik aramalari
+        # rate-limit'ledigi icin once en cok isabet eden temiz sorgu denenir;
+        # olmazsa ham sorgu (cok kelimeli oyunlar icin) denenecektir.
+        attempts: List[str] = []
+        clean = _normalize(query).upper()
+        if clean:
+            attempts.append(clean)
+        if query != clean:
+            attempts.append(query)
+        items: List[Dict] = []
+        for idx, attempt in enumerate(attempts):
+            if idx > 0:
+                await asyncio.sleep(3.0)
+            url = SEARCH_URL.format(query=quote(attempt))
+            client = self._get_client()
+            try:
+                resp = await client.get(url, headers={"Referer": ONLINEFIX_BASE + "/"})
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise OnlineFixError(f"Search failed HTTP {e.response.status_code}") from e
+            except httpx.RequestError as e:
+                raise OnlineFixError(f"Search network error: {e}") from e
 
+            items = self._parse_search_items(resp.text)
+            items = [it for it in items if _search_match(query, it["url"], it["title"])]
+            if items:
+                break
+        return items[:limit]
+
+    def _parse_search_items(self, html_text: str) -> List[Dict]:
         items: List[Dict] = []
         seen = set()
-        for url_match, title in _SEARCH_ITEM_RE.findall(resp.text):
+        for url_match, title in _SEARCH_ITEM_RE.findall(html_text):
             if url_match in seen:
                 continue
             seen.add(url_match)
             items.append({"title": html.unescape(title).strip(), "url": url_match})
-
-        q = query.lower()
-        items.sort(key=lambda it: 0 if q in it["url"].lower() else 1)
-        return items[:limit]
+        return items
 
     # ------------------------------------------------------------------ #
     # 2. Oyun sayfasindan baslik + hosters linkini bulma
