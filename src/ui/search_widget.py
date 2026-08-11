@@ -1,3 +1,4 @@
+import re
 from src.config.settings import SettingsManager
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, 
                                QScrollArea, QLabel, QPushButton, QCheckBox, 
@@ -11,6 +12,34 @@ from src.utils.async_utils import get_async_loop
 def _has_image(game: dict) -> bool:
     """True when the game dict carries usable image data (header_image or image_url)."""
     return bool(game.get("header_image") or game.get("image_url"))
+
+def _rank_search_results(query: str, games: list) -> list:
+    """Relevance ranking: exact > prefix > whole-word > substring."""
+    q = query.strip().lower()
+    if not q:
+        return games
+
+    def tier(game: dict) -> tuple:
+        name = (game.get("game_name") or "").lower()
+        if name == q:
+            return (0, 0)
+        if name.startswith(q):
+            return (1, 0)
+        m = re.search(rf"(?<![a-z0-9]){re.escape(q)}(?![a-z0-9])", name)
+        if m:
+            # Kelime isimde ne kadar başta ise o kadar alakalı.
+            return (2, m.start())
+        if q in name:
+            return (3, 0)
+        return (4, 0)
+    return sorted(
+        games,
+        key=lambda g: (
+            tier(g),
+            0 if _has_image(g) else 1,
+            (g.get("game_name") or "").lower(),
+        ),
+    )
 
 
 class SearchWidget(QWidget):
@@ -185,7 +214,8 @@ class SearchWidget(QWidget):
 
     async def _fetch_search(self, query: str, is_appid: bool) -> None:
         try:
-            results = await hubcap_api.search_game(query, limit=self.limit, appid=is_appid)
+            # limit 100: API bunu destekliyor; daha fazla sonuç = daha iyi alaka sıralaması.
+            results = await hubcap_api.search_game(query, limit=100, appid=is_appid)
             data = results.get("results", []) if isinstance(results, dict) else results
             self._display_results(data)
         except Exception as e:
@@ -250,16 +280,9 @@ class SearchWidget(QWidget):
 
         self.status_label.hide()
 
-        # Primary sort: exact match to the top.
-        # Secondary sort: games without image data sink to the end.
-        query = self.search_input.text().strip().lower()
-        results = sorted(
-            results,
-            key=lambda g: (
-                0 if g.get("game_name", "").lower() == query else 1,
-                0 if _has_image(g) else 1,
-            ),
-        )
+        # Alaka sıralaması: tam eşleşme > prefix > tam kelime > substring.
+        query = self.search_input.text().strip()
+        results = _rank_search_results(query, results)
         self.current_results = results
 
         self._list_checkboxes = {}
