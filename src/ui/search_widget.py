@@ -8,6 +8,11 @@ from src.ui.game_card import GameCard
 from src.ui.flow_layout import FlowLayout
 from src.utils.async_utils import get_async_loop
 
+def _has_image(game: dict) -> bool:
+    """True when the game dict carries usable image data (header_image or image_url)."""
+    return bool(game.get("header_image") or game.get("image_url"))
+
+
 class SearchWidget(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -231,17 +236,25 @@ class SearchWidget(QWidget):
 
     def _display_results(self, results: list) -> None:
         self._clear_results()
-        self.current_results = results
         if not results:
+            self.current_results = []
             self.status_label.setText("No games found.")
             self.status_label.show()
             return
 
         self.status_label.hide()
 
-        # Sort exact match to the top
+        # Primary sort: exact match to the top.
+        # Secondary sort: games without image data sink to the end.
         query = self.search_input.text().strip().lower()
-        results = sorted(results, key=lambda g: 0 if g.get("game_name", "").lower() == query else 1)
+        results = sorted(
+            results,
+            key=lambda g: (
+                0 if g.get("game_name", "").lower() == query else 1,
+                0 if _has_image(g) else 1,
+            ),
+        )
+        self.current_results = results
 
         self._list_checkboxes = {}
         if self.list_mode:
