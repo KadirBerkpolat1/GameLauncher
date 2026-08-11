@@ -208,4 +208,9 @@ class LibraryWidget(QWidget):
                 card = GameCard(app_id, title, image_url, mode="library")
                 card.download_requested.connect(self.download_requested.emit)
                 card.uninstalled.connect(lambda _app_id: self.load_library())
+                card.image_load_failed.connect(self._push_card_to_end)
                 self.grid_layout.addWidget(card)
+
+    def _push_card_to_end(self, card) -> None:
+        self.grid_layout.removeWidget(card)
+        self.grid_layout.addWidget(card)

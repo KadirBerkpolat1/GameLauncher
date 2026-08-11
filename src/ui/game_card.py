@@ -71,6 +71,7 @@ class GameCard(QFrame):
     """
     download_requested = Signal(int, str)
     uninstalled = Signal(int)
+    image_load_failed = Signal(object)
 
     def __init__(self, app_id: int, title: str, image_url: str = "", mode: str = "search") -> None:
         super().__init__()
@@ -207,6 +208,7 @@ class GameCard(QFrame):
             self.network_manager.get(request)
         else:
             self.image_label.setText("No Image Available")
+            self.image_load_failed.emit(self)
 
     def _on_image_loaded(self, reply: QNetworkReply) -> None:
         status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)

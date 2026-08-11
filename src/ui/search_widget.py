@@ -270,8 +270,13 @@ class SearchWidget(QWidget):
 
                 image_url = game.get("header_image", "")
                 card = GameCard(app_id, title, image_url, mode="store")
+                card.image_load_failed.connect(self._push_card_to_end)
                 self.results_layout.addWidget(card)
 
+
+    def _push_card_to_end(self, card) -> None:
+        self.results_layout.removeWidget(card)
+        self.results_layout.addWidget(card)
     def _create_list_row(self, game: dict) -> QWidget:
         from PySide6.QtWidgets import QFrame, QCheckBox
         raw_id = game.get("game_id", "0")
