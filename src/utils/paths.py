@@ -13,6 +13,9 @@ def get_steam_path() -> Optional[Path]:
     possible_paths = [
         home / ".local" / "share" / "Steam",
         home / ".steam" / "steam",
+        # Ubuntu snap Steam (classic confinement keeps data under ~/snap/steam)
+        home / "snap" / "steam" / "common" / ".steam" / "steam",
+        home / "snap" / "steam" / "common" / ".local" / "share" / "Steam",
         home / ".var" / "app" / "com.valvesoftware.Steam" / ".local" / "share" / "Steam",
         Path("/usr/share/steam")
     ]
