@@ -207,8 +207,60 @@ class GameCard(QFrame):
             request = QNetworkRequest(QUrl(self.image_urls[index]))
             self.network_manager.get(request)
         else:
-            self.image_label.setText("No Image Available")
-            self.image_load_failed.emit(self)
+            if not getattr(self, '_steam_fallback_tried', False):
+                self._steam_fallback_tried = True
+                get_async_loop().create_task(self._fetch_steam_api_fallback())
+            else:
+                self._generate_dynamic_cover()
+
+    async def _fetch_steam_api_fallback(self) -> None:
+        try:
+            import httpx
+            url = f"https://store.steampowered.com/api/appdetails?appids={self.app_id}"
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                resp = await client.get(url, timeout=5.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    app_data = data.get(str(self.app_id), {})
+                    if app_data.get("success") and "data" in app_data:
+                        game_data = app_data["data"]
+                        fallback_img = game_data.get("header_image") or game_data.get("capsule_image")
+                        if fallback_img and fallback_img not in self.image_urls:
+                            self.image_urls.append(fallback_img)
+                            self._start_network_fetch(len(self.image_urls) - 1)
+                            return
+        except Exception as e:
+            print(f"Steam API fallback error for {self.app_id}: {e}")
+        
+        self._generate_dynamic_cover()
+
+    def _generate_dynamic_cover(self) -> None:
+        from PySide6.QtGui import QPainter, QLinearGradient, QColor, QFont, QBrush
+        from PySide6.QtCore import QRect
+        
+        pixmap = QPixmap(240, 360)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        gradient = QLinearGradient(0, 0, 0, 360)
+        gradient.setColorAt(0.0, QColor(40, 44, 52))
+        gradient.setColorAt(1.0, QColor(20, 22, 26))
+        painter.fillRect(0, 0, 240, 360, QBrush(gradient))
+        
+        font = QFont("Arial", 16, QFont.Weight.Bold)
+        painter.setFont(font)
+        painter.setPen(QColor(255, 255, 255))
+        
+        rect = QRect(10, 10, 220, 340)
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.TextWordWrap, self.title)
+        
+        painter.end()
+        
+        self.image_label.setPixmap(pixmap)
+        self.image_label.setText("")
+        self.image_load_failed.emit(self)
 
     def _on_image_loaded(self, reply: QNetworkReply) -> None:
         status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
