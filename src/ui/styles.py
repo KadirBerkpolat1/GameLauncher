@@ -222,6 +222,13 @@ QTabWidget::pane {
 }
 
 QTabBar::tab {
+    background: transparent;
+    color: #94A3B8;
+    padding: 10px 24px;
+    font-weight: 600;
+    font-size: 14px;
+    border-bottom: 2px solid transparent;
+}
 
 QComboBox:hover {
     border: 1px solid #3F475B;
@@ -241,13 +248,6 @@ QComboBox QAbstractItemView {
     selection-background-color: rgba(99, 102, 241, 0.2);
     selection-color: #818CF8;
     outline: none;
-}
-    background: transparent;
-    color: #94A3B8;
-    padding: 10px 24px;
-    font-weight: 600;
-    font-size: 14px;
-    border-bottom: 2px solid transparent;
 }
 
 QTabBar::tab:selected {

@@ -37,7 +37,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.setSpacing(5)
 
         # Profile / Logo area placeholder
-        logo_label = QLabel("<h2><span style='color: #6366F1;'>✦</span> NEBULA</h2>")
+        logo_label = QLabel("<h2><span style='color: #818CF8;'>✦</span> NEBULA</h2>")
         logo_label.setStyleSheet("color: #F8FAFC; font-weight: 900; padding-left: 12px; padding-bottom: 24px; padding-top: 10px; letter-spacing: 3px; font-size: 16px;")
         logo_label.setTextFormat(Qt.TextFormat.RichText)
         sidebar_layout.addWidget(logo_label)
