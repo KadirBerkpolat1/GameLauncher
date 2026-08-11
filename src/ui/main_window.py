@@ -2,7 +2,6 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
                                  QPushButton, QStackedWidget, QLabel, QSpacerItem, QSizePolicy, QButtonGroup)
 from PySide6.QtCore import Qt, QSize
 from src.ui.search_widget import SearchWidget
-from src.ui.home_widget import HomeWidget
 from src.ui.library_widget import LibraryWidget
 from src.ui.downloads_widget import DownloadsWidget
 from src.ui.settings_dialog import SettingsDialog
@@ -43,7 +42,6 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(logo_label)
 
         # Navigation Buttons
-        self.btn_home = self._create_nav_button("Home")
         self.btn_installer = self._create_nav_button("Installer")
         self.btn_library = self._create_nav_button("Library")
         self.btn_store = self._create_nav_button("Store")
@@ -53,7 +51,6 @@ class MainWindow(QMainWindow):
         
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
-        self.nav_group.addButton(self.btn_home)
         self.nav_group.addButton(self.btn_installer)
         self.nav_group.addButton(self.btn_library)
         self.nav_group.addButton(self.btn_store)
@@ -61,7 +58,6 @@ class MainWindow(QMainWindow):
         self.nav_group.addButton(self.btn_settings)
         self.nav_group.addButton(self.btn_support)
 
-        sidebar_layout.addWidget(self.btn_home)
         sidebar_layout.addWidget(self.btn_installer)
         sidebar_layout.addWidget(self.btn_library)
         sidebar_layout.addWidget(self.btn_store)
@@ -110,20 +106,18 @@ class MainWindow(QMainWindow):
         self.downloads_view = DownloadsWidget()
         self.hubcap_tools_view = HubcapToolsWidget()
         
-        self.home_view = self._create_placeholder("Home")
         self.support_view = self._create_placeholder("Support")
 
-        # Stack index map: 0:Home 1:Installer 2:Library 3:Store 4:Downloads 5:Support
-        self.stack.addWidget(self.home_view)          # 0
-        self.stack.addWidget(self.hubcap_tools_view)  # 1
-        self.stack.addWidget(self.library_view)       # 2
-        self.stack.addWidget(self.search_view)        # 3
-        self.stack.addWidget(self.downloads_view)     # 4
-        self.stack.addWidget(self.support_view)       # 5
+        # Stack index map: 0:Installer 1:Library 2:Store 3:Downloads 4:Support
+        self.stack.addWidget(self.hubcap_tools_view)  # 0
+        self.stack.addWidget(self.library_view)       # 1
+        self.stack.addWidget(self.search_view)        # 2
+        self.stack.addWidget(self.downloads_view)     # 3
+        self.stack.addWidget(self.support_view)       # 4
 
 
-        # Default to Home
-        self.btn_home.setChecked(True)
+        # Default to Installer
+        self.btn_installer.setChecked(True)
         self.stack.setCurrentIndex(0)
 
         content_layout.addWidget(self.stack)
@@ -133,22 +127,19 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(content_wrapper)
 
         # Connections
-        self.btn_home.clicked.connect(lambda: self._switch_view(0, self.btn_home))
-        self.btn_installer.clicked.connect(lambda: self._switch_view(1, self.btn_installer))
-        self.btn_library.clicked.connect(lambda: self._switch_view(2, self.btn_library))
-        self.btn_store.clicked.connect(lambda: self._switch_view(3, self.btn_store))
-        self.btn_downloads.clicked.connect(lambda: self._switch_view(4, self.btn_downloads))
-        self.btn_support.clicked.connect(lambda: self._switch_view(5, self.btn_support))
+        self.btn_installer.clicked.connect(lambda: self._switch_view(0, self.btn_installer))
+        self.btn_library.clicked.connect(lambda: self._switch_view(1, self.btn_library))
+        self.btn_store.clicked.connect(lambda: self._switch_view(2, self.btn_store))
+        self.btn_downloads.clicked.connect(lambda: self._switch_view(3, self.btn_downloads))
+        self.btn_support.clicked.connect(lambda: self._switch_view(4, self.btn_support))
         self.btn_settings.clicked.connect(self._open_settings)
         self.library_view.download_requested.connect(self._handle_download_request)
         self.library_view.restart_steam_requested.connect(self._restart_steam)
 
     def _handle_download_request(self, app_id: int, title: str) -> None:
-        self._switch_view(4, self.btn_downloads)
+        self._switch_view(3, self.btn_downloads)
         self.downloads_view.start_download(app_id, title)
     def _create_placeholder(self, text: str) -> QWidget:
-        if text == "Home":
-            return HomeWidget()
         w = QWidget()
         layout = QVBoxLayout(w)
         lbl = QLabel(f"{text} view is under construction.")
