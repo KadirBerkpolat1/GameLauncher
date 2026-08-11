@@ -93,9 +93,7 @@ class DepotSelectionDialog(QDialog):
 
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
-            scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
             scroll_widget = QWidget()
-            scroll_widget.setStyleSheet("background: transparent;")
             scroll_layout = QVBoxLayout(scroll_widget)
             scroll_layout.setSpacing(6)
 

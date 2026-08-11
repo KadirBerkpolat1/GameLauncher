@@ -139,11 +139,8 @@ class SearchWidget(QWidget):
         # Results Area
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
-        self.scroll_area.setStyleSheet("background-color: transparent;")
 
         self.results_container = QWidget()
-        self.results_container.setStyleSheet("background-color: transparent;")
         self.results_layout = FlowLayout(self.results_container, spacing=20)
 
         # Status Label
@@ -315,10 +312,6 @@ class SearchWidget(QWidget):
 
         row = QFrame()
         row.setObjectName("SearchListRow")
-        row.setStyleSheet("""
-            #SearchListRow { background-color: #161B22; border: 1px solid #30363D; border-radius: 8px; }
-            #SearchListRow:hover { background-color: #21262D; border-color: #58A6FF; }
-        """)
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(10, 8, 10, 8)
         row_layout.setSpacing(12)

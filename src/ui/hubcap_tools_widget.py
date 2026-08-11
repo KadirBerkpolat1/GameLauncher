@@ -23,7 +23,6 @@ class HubcapToolsWidget(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setStyleSheet("background-color: transparent;")
         
         content = QWidget()
         layout = QVBoxLayout(content)

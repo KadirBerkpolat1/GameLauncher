@@ -140,8 +140,7 @@ class GameCard(QFrame):
             
             btn_text = "Uninstall" if installed_path else "Delete Lua"
             self.btn_uninstall = QPushButton(btn_text)
-            self.btn_uninstall.setProperty("cssClass", "SecondaryAction")
-            self.btn_uninstall.setStyleSheet("background-color: #DA3633; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600;")
+            self.btn_uninstall.setProperty("cssClass", "DangerAction")
             self.btn_uninstall.clicked.connect(self._uninstall_game)
 
             self.btn_download = QPushButton("Download")
@@ -152,6 +151,7 @@ class GameCard(QFrame):
             btn_layout.addWidget(self.btn_download)
             if installed_path:
                 self.btn_apply_fix = QPushButton("Apply Fix")
+                self.btn_apply_fix.setProperty("cssClass", "SecondaryAction")
                 self.btn_apply_fix.clicked.connect(self._apply_fix_auto)
                 btn_layout.addWidget(self.btn_apply_fix)
         layout.addLayout(btn_layout)

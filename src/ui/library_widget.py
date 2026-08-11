@@ -88,11 +88,9 @@ class LibraryWidget(QWidget):
         # Grid Area
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
-        self.scroll_area.setStyleSheet("background-color: transparent;")
 
         self.grid_container = QWidget()
-        self.grid_container.setStyleSheet("background-color: transparent;")
+
         self.grid_layout = FlowLayout(self.grid_container, spacing=20)
 
         # Empty state label

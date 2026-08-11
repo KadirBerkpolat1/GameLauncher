@@ -7,6 +7,23 @@ QWidget {
     font-size: 14px;
 }
 
+/* Labels blend into their container by default; explicit backgrounds via cssClass/inline */
+QLabel {
+    background-color: transparent;
+}
+
+/* Scroll Areas - transparent so containers blend into the page */
+QScrollArea {
+    background-color: transparent;
+    border: none;
+}
+
+QScrollArea#HistoryScroll {
+    background-color: transparent;
+    border: 1px solid #1E212B;
+    border-radius: 8px;
+}
+
 /* Scrollbars */
 QScrollBar:vertical {
     background-color: transparent;
@@ -170,6 +187,18 @@ QFrame[cssClass="GameCard"] {
 QFrame[cssClass="GameCard"]:hover {
     border: 1px solid #3F475B;
     background-color: #161822;
+}
+
+/* Search list rows (objectName based so children keep app-level QSS) */
+#SearchListRow {
+    background-color: #161B22;
+    border: 1px solid #30363D;
+    border-radius: 8px;
+}
+
+#SearchListRow:hover {
+    background-color: #21262D;
+    border-color: #58A6FF;
 }
 
 /* Labels */

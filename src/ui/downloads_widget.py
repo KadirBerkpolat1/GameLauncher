@@ -55,7 +55,6 @@ class DownloadsWidget(QWidget):
         self.active_scroll = QScrollArea()
         self.active_scroll.setWidgetResizable(True)
         self.active_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        self.active_scroll.setStyleSheet("background-color: transparent;")
         self.active_scroll.setMaximumHeight(200)
         self.active_scroll.setWidget(self.active_downloads_container)
         self.active_scroll.hide() # Hide initially
@@ -69,8 +68,7 @@ class DownloadsWidget(QWidget):
 
         self.history_scroll = QScrollArea()
         self.history_scroll.setWidgetResizable(True)
-        self.history_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        self.history_scroll.setStyleSheet("background-color: transparent; border: 1px solid #1E212B; border-radius: 8px;")
+        self.history_scroll.setObjectName("HistoryScroll")
         self.history_scroll.setMaximumHeight(150)
 
         self.history_container = QWidget()
