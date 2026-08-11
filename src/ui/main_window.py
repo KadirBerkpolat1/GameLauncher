@@ -172,32 +172,48 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self)
         dialog.exec()
 
+    @staticmethod
+    def _is_steam_running() -> bool:
+        """Returns True if a Steam client process is running."""
+        import subprocess
+        res = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
+        return res.returncode == 0
+
     def _restart_steam(self) -> None:
-        """Gracefully shuts down Steam and restarts it so VDF changes take effect."""
+        """Starts Steam if it is closed; otherwise shuts it down and starts it again."""
         import subprocess
         from PySide6.QtCore import QTimer
         try:
             self.btn_restart_steam.setText("Restarting...")
             self.btn_restart_steam.setEnabled(False)
 
-            # Check if Steam is running
-            res = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
-            if res.returncode == 0:
-                # Steam is running, shut it down gracefully
+            if self._is_steam_running():
+                # Steam is running: shut it down gracefully, wait until it
+                # actually exits, then relaunch it.
                 subprocess.run(["steam", "-shutdown"], check=False)
-                QTimer.singleShot(3000, self._start_steam_again)
+                self._shutdown_attempts = 0
+                QTimer.singleShot(1000, self._start_when_closed)
             else:
-                # Steam is not running, just start it
+                # Steam is not running: just start it.
                 self._start_steam_again()
         except Exception as e:
             print(f"Failed to check/shutdown steam: {e}")
             self.btn_restart_steam.setText("Restart Steam")
             self.btn_restart_steam.setEnabled(True)
 
+    def _start_when_closed(self) -> None:
+        """Polls for Steam to finish shutting down, then relaunches it."""
+        from PySide6.QtCore import QTimer
+        self._shutdown_attempts += 1
+        if not self._is_steam_running() or self._shutdown_attempts >= 30:
+            self._start_steam_again()
+            return
+        QTimer.singleShot(1000, self._start_when_closed)
+
     def _start_steam_again(self) -> None:
         import subprocess
         try:
-            # 2. Start Steam in the background
+            # Start Steam in the background
             subprocess.Popen(["steam"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.btn_restart_steam.setText("Restart Steam")
             self.btn_restart_steam.setEnabled(True)
@@ -205,3 +221,4 @@ class MainWindow(QMainWindow):
             print(f"Failed to start steam: {e}")
             self.btn_restart_steam.setText("Restart Steam")
             self.btn_restart_steam.setEnabled(True)
+
