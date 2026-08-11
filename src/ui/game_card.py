@@ -211,7 +211,8 @@ class GameCard(QFrame):
                 self._steam_fallback_tried = True
                 get_async_loop().create_task(self._fetch_steam_api_fallback())
             else:
-                self._generate_dynamic_cover()
+                self.image_label.setText("No Image Available")
+                self.image_load_failed.emit(self)
 
     async def _fetch_steam_api_fallback(self) -> None:
         try:
@@ -232,34 +233,7 @@ class GameCard(QFrame):
         except Exception as e:
             print(f"Steam API fallback error for {self.app_id}: {e}")
         
-        self._generate_dynamic_cover()
-
-    def _generate_dynamic_cover(self) -> None:
-        from PySide6.QtGui import QPainter, QLinearGradient, QColor, QFont, QBrush
-        from PySide6.QtCore import QRect
-        
-        pixmap = QPixmap(240, 360)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        gradient = QLinearGradient(0, 0, 0, 360)
-        gradient.setColorAt(0.0, QColor(40, 44, 52))
-        gradient.setColorAt(1.0, QColor(20, 22, 26))
-        painter.fillRect(0, 0, 240, 360, QBrush(gradient))
-        
-        font = QFont("Arial", 16, QFont.Weight.Bold)
-        painter.setFont(font)
-        painter.setPen(QColor(255, 255, 255))
-        
-        rect = QRect(10, 10, 220, 340)
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.TextWordWrap, self.title)
-        
-        painter.end()
-        
-        self.image_label.setPixmap(pixmap)
-        self.image_label.setText("")
+        self.image_label.setText("No Image Available")
         self.image_load_failed.emit(self)
 
     def _on_image_loaded(self, reply: QNetworkReply) -> None:
