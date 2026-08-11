@@ -187,18 +187,32 @@ class GameCard(QFrame):
     async def _resolve_and_fetch_sgdb(self, api_key: str) -> None:
         try:
             import httpx
-            url = f"https://www.steamgriddb.com/api/v2/grids/game/steam/{self.app_id}?dimensions=600x900"
+            # v2 endpoint: grids/game/{appid} — eski grids/game/steam/{appid}
+            # formatı artık 404 dönüyor.
+            url = f"https://www.steamgriddb.com/api/v2/grids/game/{self.app_id}?dimensions=600x900"
             headers = {"Authorization": f"Bearer {api_key}"}
             async with httpx.AsyncClient(follow_redirects=True) as client:
                 resp = await client.get(url, headers=headers, timeout=5.0)
                 if resp.status_code == 200:
                     data = resp.json()
                     if data.get("success") and data.get("data"):
-                        sgdb_image_url = data["data"][0]["url"]
+                        # En yüksek topluluk skorlu grid'i seç
+                        grids = sorted(
+                            data["data"],
+                            key=lambda g: g.get("score", 0),
+                            reverse=True,
+                        )
+                        sgdb_image_url = grids[0]["url"]
                         self.image_urls.insert(0, sgdb_image_url)
+                else:
+                    print(
+                        f"SteamGridDB API {resp.status_code} for {self.app_id}, "
+                        "falling back to Steam CDN"
+                    )
         except Exception as e:
             print(f"SteamGridDB API error for {self.app_id}: {e}")
-        
+
+        # Her durumda fallback'e düş: hata, boş sonuç, geçersiz anahtar...
         self._start_network_fetch(0)
 
     def _start_network_fetch(self, index: int) -> None:
