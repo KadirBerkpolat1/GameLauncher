@@ -94,10 +94,11 @@ class HomeWidget(QWidget):
         
     def refresh_stats(self):
         try:
+            from src.utils.paths import get_installed_apps
+            app_ids = set(get_installed_apps().keys())
             cfg = SLSsteamConfigManager()
-            app_ids = set(cfg.config_data.get("AppIds", []) or [])
+            app_ids.update(cfg.config_data.get("AppIds", []) or [])
             app_ids.update(cfg.config_data.get("AdditionalApps", []) or [])
-            self.card_games.layout().itemAt(0).widget().setText(str(len(app_ids)))
 
             lua_count = 0
             lua_size = 0

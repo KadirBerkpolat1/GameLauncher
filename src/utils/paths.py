@@ -69,3 +69,49 @@ def get_steam_libraries() -> list:
             pass
 
     return list(all_libraries)
+
+# Steam system tools that are installed like games but must not appear in the
+# launcher library: runtimes, Proton, redistributables, Spacewar.
+STEAM_TOOL_APPIDS = {
+    480,     # Spacewar
+    228980,  # Steamworks Common Redistributables
+    1070560, # Steam Linux Runtime 1.0 (scout)
+    1391110, # Steam Linux Runtime 2.0 (soldier)
+    1628350, # Steam Linux Runtime 3.0 (sniper)
+    4183110, # Steam Linux Runtime 4.0
+    3658110, # Proton 10.0
+}
+STEAM_TOOL_NAME_PREFIXES = ("steam linux runtime", "proton ")
+
+
+def get_installed_apps() -> dict:
+    """
+    Returns {app_id: name} for games currently installed in any Steam library
+    by reading steamapps/appmanifest_*.acf files. System tools (runtimes,
+    Proton, redistributables, Spacewar) are filtered out.
+
+    This reflects the real on-disk state and is independent of the SLSsteam
+    config, so games stay visible even after re-cloning or updating the app.
+    """
+    apps: dict = {}
+    for lib in get_steam_libraries():
+        steamapps = Path(lib) / "steamapps"
+        if not steamapps.is_dir():
+            continue
+        for acf in steamapps.glob("appmanifest_*.acf"):
+            try:
+                content = acf.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            m_id = re.search(r'"appid"\s+"(\d+)"', content, re.IGNORECASE)
+            if not m_id:
+                continue
+            app_id = int(m_id.group(1))
+            if app_id in STEAM_TOOL_APPIDS:
+                continue
+            m_name = re.search(r'"name"\s+"(.+?)"', content, re.IGNORECASE)
+            name = m_name.group(1) if m_name else ""
+            if name.strip().lower().startswith(STEAM_TOOL_NAME_PREFIXES):
+                continue
+            apps[app_id] = name
+    return apps

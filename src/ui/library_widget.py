@@ -149,13 +149,16 @@ class LibraryWidget(QWidget):
         QMessageBox.information(self, "Export Complete", f"Exported {count} Lua file(s) to {dest}")
 
     def load_library(self) -> None:
-        """Reads the SLSsteam config and populates the library view."""
+        """Shows games installed on disk (steamapps manifests) plus SLSsteam config entries."""
         self._clear_grid()
         try:
             manager = SLSsteamConfigManager()
-            # Combine AppIds and AdditionalApps to show everything in the launcher library
             raw_app_ids = (manager.config_data.get("AppIds", []) or []) + (manager.config_data.get("AdditionalApps", []) or [])
-            app_ids = set(int(x) for x in raw_app_ids if x)
+            config_app_ids = {int(x) for x in raw_app_ids if x}
+
+            from src.utils.paths import get_installed_apps
+            installed = get_installed_apps()
+            app_ids = config_app_ids | set(installed.keys())
 
             if not app_ids:
                 self.empty_label.show()
@@ -181,33 +184,34 @@ class LibraryWidget(QWidget):
             # Fetch game details asynchronously
             loop = get_async_loop()
             self._load_generation += 1
-            loop.create_task(self._fetch_and_display_library(list(app_ids)))
+            loop.create_task(self._fetch_and_display_library(app_ids, installed))
 
         except Exception as e:
             self.empty_label.setText(f"Error loading library: {e}")
             self.empty_label.show()
 
-    async def _fetch_and_display_library(self, app_ids: list) -> None:
+    async def _fetch_and_display_library(self, app_ids: set, installed_names: dict) -> None:
         import httpx
 
         generation = self._load_generation
 
         async with httpx.AsyncClient() as client:
-            for app_id in app_ids:
+            for app_id in sorted(app_ids):
                 if generation != self._load_generation:
                     return
-                title = f"App {app_id}"
+                title = installed_names.get(app_id) or f"App {app_id}"
                 image_url = ""
-                try:
-                    steam_url = f"https://store.steampowered.com/api/appdetails?appids={app_id}"
-                    response = await client.get(steam_url, timeout=5.0)
-                    if response.status_code == 200:
-                        data = response.json()
-                        app_data = data.get(str(app_id), {})
-                        if app_data.get("success"):
-                            title = app_data.get("data", {}).get("name", title)
-                except Exception as e:
-                    print(f"Error fetching name for {app_id}: {e}")
+                if app_id not in installed_names:
+                    # Only SLSsteam-config games lack an on-disk manifest: ask Steam for a name.
+                    try:
+                        steam_url = f"https://store.steampowered.com/api/appdetails?appids={app_id}"
+                        response = await client.get(steam_url, timeout=5.0)
+                        if response.status_code == 200:
+                            app_data = response.json().get(str(app_id), {})
+                            if app_data.get("success"):
+                                title = app_data.get("data", {}).get("name", title)
+                    except Exception as e:
+                        print(f"Error fetching name for {app_id}: {e}")
 
                 if generation != self._load_generation:
                     return
