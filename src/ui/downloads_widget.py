@@ -180,7 +180,7 @@ class DownloadsWidget(QWidget):
                     dialog.open()
 
                     selected_depot_ids = await future
-                    apply_onlinefix = dialog.wants_onlinefix()
+                    apply_patch = dialog.wants_patch()
                     dialog.deleteLater()
 
                     if selected_depot_ids is None:
@@ -211,7 +211,7 @@ class DownloadsWidget(QWidget):
                         if d.get("manifest_id")
                     }
 
-                    game_data["apply_onlinefix"] = apply_onlinefix
+                    game_data["apply_patch"] = apply_patch
                     from src.services.download_task import DownloadTask
 
                     task = DownloadTask(game_data, title)
@@ -241,7 +241,7 @@ class DownloadsWidget(QWidget):
                             self._load_history()
 
                             # Güvenli Yama Uygulama ve Steam Restart
-                            if game_data.get("apply_onlinefix", False):
+                            if game_data.get("apply_patch", False):
                                 from PySide6.QtWidgets import QMessageBox
                                 from PySide6.QtCore import QTimer
                                 import subprocess
@@ -265,25 +265,32 @@ class DownloadsWidget(QWidget):
                                                 import tempfile
                                                 from pathlib import Path
                                                 fixes = await UnifiedFixFetcher.get_available_fixes(title)
-                                                if not fixes:
-                                                    # Fallback to local
-                                                    OnlineFixPatcher.apply_patch(str(app_id), task.download_dir)
-                                                    return
-                                                    
+                                                
+                                                # Goldberg (Offline Crack) Secenegini ekle
+                                                fixes.append({
+                                                    "source": "goldberg",
+                                                    "title": "Steam Korumasını Kaldır (Sadece Tek Oyunculu / Çevrimdışı)",
+                                                    "version": "Otom.",
+                                                    "url": ""
+                                                })
+                                                
                                                 from src.ui.fix_pick_dialog import FixPickDialog
                                                 dlg = FixPickDialog(fixes, self)
                                                 if dlg.exec() != QDialog.DialogCode.Accepted:
                                                     print(f"User canceled fix pick for {app_id}, skipping online patch.")
-                                                    OnlineFixPatcher.apply_patch(str(app_id), task.download_dir)
                                                     return
                                                     
                                                 best_fix = dlg.get_selected_fix()
                                                 if not best_fix:
-                                                    OnlineFixPatcher.apply_patch(str(app_id), task.download_dir)
                                                     return
                                                     
                                                 source = best_fix["source"]
-                                                if source == "onlinefix":
+                                                
+                                                if source == "goldberg":
+                                                    from src.services.drm_manager import DRMManager
+                                                    DRMManager.apply_goldberg(str(app_id), task.download_dir)
+                                                elif source == "onlinefix":
+                                                    
                                                     page = await onlinefix_api.get_game_page(best_fix["url"])
                                                     hoster_url = page.get("hoster_link")
                                                     if hoster_url:

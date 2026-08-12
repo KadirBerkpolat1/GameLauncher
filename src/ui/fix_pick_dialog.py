@@ -58,7 +58,12 @@ class FixPickDialog(QDialog):
 
         self.list_widget = QListWidget()
         for i, fix in enumerate(self.fixes):
-            source = "FreeTP" if fix["source"] == "freetp" else "Online-Fix"
+            if fix["source"] == "freetp":
+                source = "FreeTP"
+            elif fix["source"] == "onlinefix":
+                source = "Online-Fix"
+            else:
+                source = "Goldberg"
             ver = fix.get("version", "Bilinmiyor")
             if ver == "0.0.0":
                 ver = "Bilinmiyor"
