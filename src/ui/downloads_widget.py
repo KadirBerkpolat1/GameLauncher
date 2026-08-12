@@ -240,6 +240,15 @@ class DownloadsWidget(QWidget):
                             self._record_history(app_id, title, "Completed")
                             self._load_history()
 
+                            # --- OTO-GOLDBERG ---
+                            # Oyun kurulur kurulmaz offline oynanabilmesi icin (kullanici iptal etse bile)
+                            try:
+                                from src.services.drm_manager import DRMManager
+                                DRMManager.apply_goldberg(str(app_id), task.download_dir)
+                                print(f"Auto-applied Goldberg for {title} so it runs out-of-the-box.")
+                            except Exception as e:
+                                print(f"Failed to auto-apply Goldberg: {e}")
+
                             # Güvenli Yama Uygulama ve Steam Restart
                             if game_data.get("apply_patch", False):
                                 from PySide6.QtWidgets import QMessageBox
