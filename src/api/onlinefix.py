@@ -205,11 +205,21 @@ class OnlineFixClient:
 
         # Try to find the version in the page text
         version = "0.0.0"
-        ver_m = re.search(r'верси[яию]\s+(?:игры\s+)?(?:до\s+)?v?(\d+(?:\.\d+)*[a-zA-Z]*)', resp.text, re.IGNORECASE)
-        if ver_m:
-            version = ver_m.group(1)
-        else:
-            version = _extract_version(title)
+        
+        # Onerilen yontem: Torrent dosyasinin isminde versiyon arama (R.E.P.O.v0.4.4.3-OFME.torrent)
+        torrent_m = re.search(r'href=["\'][^"\']*?([^/"\']+\.torrent)["\']', resp.text, re.IGNORECASE)
+        if torrent_m:
+            torrent_name = torrent_m.group(1)
+            ver_m = re.search(r'v[\.\-]?(\d+(?:\.\d+)+)', torrent_name, re.IGNORECASE)
+            if ver_m:
+                version = ver_m.group(1)
+        
+        if version == "0.0.0":
+            ver_m = re.search(r'верси[яию]\s+(?:игры\s+)?(?:до\s+)?v?(\d+(?:\.\d+)*[a-zA-Z]*)', resp.text, re.IGNORECASE)
+            if ver_m:
+                version = ver_m.group(1)
+            else:
+                version = _extract_version(title)
 
         links = _HOSTER_LINK_RE.findall(resp.text)
         return {

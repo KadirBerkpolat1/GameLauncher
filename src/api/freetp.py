@@ -72,7 +72,16 @@ class FreeTPClient:
                         version = self._extract_version(full_title)
                     
                     if version == "0.0.0":
-                        # Eger baslikta versiyon yoksa, html icinde arayalim
+                        # Onerilen yontem: Torrent dosya adindan okuma (REPO-v0.4.4.2-by-Pioneer.torrent)
+                        torrent_m = re.search(r'href=["\'][^"\']*?([^/"\']+\.torrent)["\']', page_html, re.IGNORECASE)
+                        if torrent_m:
+                            torrent_name = torrent_m.group(1)
+                            ver_m = re.search(r'v[\.\-]?(\d+(?:\.\d+)+)', torrent_name, re.IGNORECASE)
+                            if ver_m:
+                                version = ver_m.group(1)
+                                
+                    if version == "0.0.0":
+                        # Eger baslikta veya torrent adinda versiyon yoksa, html icinde arayalim
                         # 1. Версия игры: 1.2.3
                         v_match = re.search(r'Версия игры:[^<]*?(\d+[\.\d]*[a-zA-Z]*)', page_html, re.IGNORECASE)
                         if not v_match:
