@@ -32,17 +32,19 @@ class HubcapClient:
         return api_key
 
     def _get_client(self) -> httpx.AsyncClient:
-        """Returns the active httpx client or creates a new one."""
-        if self._client is None or self._client.is_closed:
+        """Returns the active httpx client or creates a new one with updated headers."""
+        current_key = SettingsManager.get("hubcap_api_key", "").strip()
+        if self._client is None or self._client.is_closed or getattr(self, "_active_key", None) != current_key:
+            self._active_key = current_key
             headers = {
-                "Authorization": f"Bearer {self._get_api_key()}",
+                "Authorization": f"Bearer {current_key}",
                 "Accept": "application/json",
                 "User-Agent": "GameLauncher/0.1.0"
             }
             self._client = httpx.AsyncClient(
                 base_url=self.BASE_URL,
                 headers=headers,
-                timeout=10.0
+                timeout=15.0
             )
         return self._client
 
@@ -135,9 +137,27 @@ class HubcapClient:
         """GET /user/stats — Bearer auth required. Returns usage stats; raises HubcapAuthError on 401."""
         return await self._request("GET", "/user/stats")
 
+    async def validate_key(self, api_key: str = "") -> bool:
+        """
+        Validates the given API key against /user/stats.
+        Returns True if valid (200 OK), False otherwise.
+        """
+        key = api_key or self._get_api_key()
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "Accept": "application/json",
+            "User-Agent": "GameLauncher/0.1.0"
+        }
+        async with httpx.AsyncClient(base_url=self.BASE_URL, headers=headers, timeout=10.0) as client:
+            try:
+                resp = await client.get("/user/stats")
+                return resp.status_code == 200
+            except Exception:
+                return False
     def clear_cache(self) -> None:
-        """Clears the in-memory cache."""
+        """Clears the in-memory cache and resets the HTTP client."""
         self._cache.clear()
+        self._client = None
 
 # Global instance for easy access across the application
 hubcap_api = HubcapClient()

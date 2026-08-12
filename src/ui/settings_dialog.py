@@ -3,90 +3,99 @@ from pathlib import Path
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit, 
                                QPushButton, QLabel, QHBoxLayout, QCheckBox, 
                                QListWidget, QStackedWidget, QWidget, QComboBox, 
-                               QGroupBox, QRadioButton, QMessageBox, QFileDialog)
+                               QGroupBox, QRadioButton, QMessageBox, QFileDialog,
+                               QFrame, QScrollArea, QProgressBar)
 from PySide6.QtCore import Qt
 from src.config.settings import SettingsManager
 from src.utils.paths import get_steam_path
 from src.api.hubcap import hubcap_api
 from src.services.installer import SLSsteamInstaller, DDModInstaller
 from src.utils.async_utils import get_async_loop
+
+
 class SettingsDialog(QDialog):
+    """
+    Redesigned Settings Modal featuring 3 clean, fully-functional categories:
+    1. API Keys & Integrations (Hubcap, SteamGridDB with step-by-step guides)
+    2. Steam & Download Engine (Paths, Engine method, Auto-Goldberg)
+    3. Advanced Tools (SLSsteam, DDMod, Logs)
+    """
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings")
-        self.setMinimumWidth(750)
-        self.setMinimumHeight(550)
+        self.setMinimumWidth(840)
+        self.setMinimumHeight(620)
         self.init_ui()
 
     def init_ui(self) -> None:
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # --- Sidebar ---
+        main_layout.setSpacing(0)
+
+        # =====================================================================
+        # SIDEBAR
+        # =====================================================================
         self.sidebar = QListWidget()
-        self.sidebar.setFixedWidth(200)
+        self.sidebar.setFixedWidth(220)
         self.sidebar.setObjectName("Sidebar")
         self.sidebar.setStyleSheet("""
             QListWidget {
-                background-color: #161B22;
+                background-color: #0E111B;
                 border: none;
-                border-right: 1px solid #21262D;
-                color: #8B949E;
-                font-size: 14px;
-                padding-top: 10px;
+                border-right: 1px solid #1E243A;
+                color: #94A3B8;
+                font-size: 13px;
+                font-weight: 600;
+                padding-top: 15px;
             }
             QListWidget::item {
-                padding: 12px 20px;
-                border-radius: 0px;
+                padding: 14px 18px;
+                border-radius: 8px;
+                margin: 3px 10px;
             }
             QListWidget::item:selected {
-                background-color: #1F6FEB;
-                color: #FFFFFF;
-                font-weight: 600;
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(99, 102, 241, 0.25), stop:1 rgba(139, 92, 246, 0.10));
+                color: #A5B4FC;
+                border-left: 3px solid #6366F1;
+                font-weight: 700;
             }
             QListWidget::item:hover:!selected {
-                background-color: #21262D;
-                color: #C9D1D9;
+                background-color: #151928;
+                color: #F1F5F9;
             }
         """)
-        self.sidebar.addItems(["General", "Steam & Downloads", "Advanced Tools", "Fix Game", "Developer", "About App"])
+        self.sidebar.addItem("🔑   API Keys")
+        self.sidebar.addItem("📁   Steam & Engine")
+        self.sidebar.addItem("🛠️   Advanced Tools")
         self.sidebar.currentRowChanged.connect(self._change_page)
-        
-        # --- Stacked Widget ---
+
+        # =====================================================================
+        # STACKED PAGES
+        # =====================================================================
         self.stack = QStackedWidget()
         self.stack.setObjectName("MainContent")
-        
-        # Pages
-        self.page_general = QWidget()
-        self.page_steam_downloads = QWidget()
-        self.page_advanced = QWidget()
-        self.page_fix_game = QWidget()
-        self.page_developer = QWidget()
-        self.page_about = QWidget()
-        
-        self._setup_general_page()
-        self._setup_steam_downloads_page()
-        self._setup_advanced_page()
-        
-        # Placeholders
-        self.page_fix_game.setLayout(QVBoxLayout())
-        self.page_developer.setLayout(QVBoxLayout())
-        self.page_about.setLayout(QVBoxLayout())
-        self.stack.addWidget(self.page_general)
-        self.stack.addWidget(self.page_steam_downloads)
-        self.stack.addWidget(self.page_advanced)
-        self.stack.addWidget(self.page_fix_game)
-        self.stack.addWidget(self.page_developer)
-        self.stack.addWidget(self.page_about)
-        
+
+        self.page_api = QWidget()
+        self.page_steam = QWidget()
+        self.page_tools = QWidget()
+
+        self._setup_api_page()
+        self._setup_steam_page()
+        self._setup_tools_page()
+
+        self.stack.addWidget(self.page_api)
+        self.stack.addWidget(self.page_steam)
+        self.stack.addWidget(self.page_tools)
+
         main_layout.addWidget(self.sidebar)
-        
-        # Right side layout (Stack + Buttons)
+
+        # Right side layout (Stack + Bottom Bar)
         right_layout = QVBoxLayout()
-        right_layout.setContentsMargins(15, 15, 15, 15)
+        right_layout.setContentsMargins(24, 24, 24, 20)
+        right_layout.setSpacing(16)
         right_layout.addWidget(self.stack)
-        
-        # --- Action Buttons ---
+
+        # Action Buttons
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
@@ -94,351 +103,539 @@ class SettingsDialog(QDialog):
         cancel_btn.setProperty("cssClass", "SecondaryAction")
         cancel_btn.clicked.connect(self.reject)
 
-        save_btn = QPushButton("Save")
+        save_btn = QPushButton("Save Settings")
         save_btn.setProperty("cssClass", "PrimaryAction")
         save_btn.clicked.connect(self._save_settings)
         save_btn.setDefault(True)
 
         btn_layout.addWidget(cancel_btn)
         btn_layout.addWidget(save_btn)
-        
+
         right_layout.addLayout(btn_layout)
         main_layout.addLayout(right_layout)
-        
+
         self.sidebar.setCurrentRow(0)
-        
+
     def _change_page(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
-        
-    def _setup_general_page(self) -> None:
-        layout = QVBoxLayout(self.page_general)
-        layout.setAlignment(Qt.AlignTop)
-        layout.setSpacing(20)
-        
-        title = QLabel("General Settings")
-        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #FFFFFF;")
+
+    # =========================================================================
+    # 1. API KEYS PAGE & INSTRUCTION GUIDES
+    # =========================================================================
+    def _setup_api_page(self) -> None:
+        scroll = QScrollArea(self.page_api)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 10, 0)
+        layout.setSpacing(16)
+
+        title = QLabel("API Keys & Integrations")
+        title.setProperty("cssClass", "HeaderTitle")
+        sub = QLabel("Configure your external API tokens for store catalog search and high-resolution posters.")
+        sub.setProperty("cssClass", "SubHeader")
         layout.addWidget(title)
+        layout.addWidget(sub)
+
+        # Hubcap API Group
+        group_hubcap = QGroupBox("Hubcap Manifest API (Required for Store && Auto-Download)")
+        hubcap_layout = QVBoxLayout(group_hubcap)
+        hubcap_layout.setSpacing(10)
+
+        self.input_hubcap_key = QLineEdit()
+        self.input_hubcap_key.setPlaceholderText("Paste your Hubcap Bearer API key here...")
+        self.input_hubcap_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.input_hubcap_key.setText(SettingsManager.get("hubcap_api_key", ""))
+
+        btn_row = QHBoxLayout()
+        self.btn_show_key = QPushButton("Show Key")
+        self.btn_show_key.setProperty("cssClass", "SecondaryAction")
+        self.btn_show_key.clicked.connect(self._toggle_key_visibility)
+
+        self.btn_test_key = QPushButton("Test Connection")
+        self.btn_test_key.setProperty("cssClass", "SecondaryAction")
+        self.btn_test_key.clicked.connect(self._test_hubcap_key)
+
+        btn_row.addWidget(self.btn_show_key)
+        btn_row.addWidget(self.btn_test_key)
+        btn_row.addStretch()
+
+        self.lbl_hubcap_status = QLabel("")
+        self.lbl_hubcap_status.setStyleSheet("font-size: 12px; font-weight: 600;")
+
+        hubcap_layout.addWidget(self.input_hubcap_key)
+        hubcap_layout.addLayout(btn_row)
+        hubcap_layout.addWidget(self.lbl_hubcap_status)
+        layout.addWidget(group_hubcap)
+
+        # Hubcap Account & Quota Status Card
+        self.card_account = QFrame()
+        self.card_account.setObjectName("SurfaceCard")
+        self.card_account.setStyleSheet("""
+            QFrame#SurfaceCard {
+                background-color: #121522;
+                border: 1px solid #232A44;
+                border-radius: 12px;
+                padding: 16px;
+            }
+        """)
+        acct_layout = QVBoxLayout(self.card_account)
+        acct_layout.setSpacing(10)
+
+        acct_header_row = QHBoxLayout()
+        acct_title = QLabel("👤   Hubcap Account & Daily Quota Status")
+        acct_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #FFFFFF;")
         
-        # Theme & Appearance
-        theme_group = QGroupBox("Theme & Appearance")
-        theme_layout = QVBoxLayout()
-        theme_combo = QComboBox()
-        theme_combo.addItems(["Default (Dark)", "Custom"])
-        theme_layout.addWidget(QLabel("Application Theme:"))
-        theme_layout.addWidget(theme_combo)
-        theme_group.setLayout(theme_layout)
-        layout.addWidget(theme_group)
-        
-        # Hubcap API Key
-        api_group = QGroupBox("Hubcap API Key")
-        api_layout = QVBoxLayout()
-        
-        desc = QLabel("To download games and DLCs, you need a Hubcap API Key. Keys must start with 'smm_'.")
-        desc.setWordWrap(True)
-        api_layout.addWidget(desc)
-        
-        api_input_layout = QHBoxLayout()
-        self.api_key_input = QLineEdit()
-        self.api_key_input.setEchoMode(QLineEdit.Password)
-        self.api_key_input.setText(SettingsManager.get("hubcap_api_key", ""))
-        self.api_key_input.setPlaceholderText("smm_...")
-        
-        validate_btn = QPushButton("Validate")
-        validate_btn.setProperty("cssClass", "SecondaryAction")
-        validate_btn.clicked.connect(self._validate_api_key)
-        validate_btn.setAutoDefault(False)
-        
-        api_input_layout.addWidget(self.api_key_input)
-        api_input_layout.addWidget(validate_btn)
-        api_layout.addLayout(api_input_layout)
-        # SteamGridDB API Key
-        sgdb_group = QGroupBox("SteamGridDB API Key")
-        sgdb_layout = QVBoxLayout()
-        sgdb_desc = QLabel("Optional: Enter your API key to fetch high-quality vertical covers from SteamGridDB instead of Steam.")
-        sgdb_desc.setWordWrap(True)
+        self.btn_acct_refresh = QPushButton("🔄  Refresh Stats")
+        self.btn_acct_refresh.setProperty("cssClass", "SecondaryAction")
+        self.btn_acct_refresh.clicked.connect(self._fetch_account_stats)
+
+        acct_header_row.addWidget(acct_title)
+        acct_header_row.addStretch()
+        acct_header_row.addWidget(self.btn_acct_refresh)
+
+        # Metrics Row
+        metrics_row = QHBoxLayout()
+        metrics_row.setSpacing(20)
+
+        self.lbl_user_name = QLabel("<b>Username:</b> —")
+        self.lbl_user_name.setTextFormat(Qt.TextFormat.RichText)
+        self.lbl_user_name.setStyleSheet("color: #E2E8F0; font-size: 13px;")
+
+        self.lbl_user_quota = QLabel("<b>Daily Quota:</b> —")
+        self.lbl_user_quota.setTextFormat(Qt.TextFormat.RichText)
+        self.lbl_user_quota.setStyleSheet("color: #E2E8F0; font-size: 13px;")
+
+        self.lbl_user_expires = QLabel("<b>Key Expires:</b> —")
+        self.lbl_user_expires.setTextFormat(Qt.TextFormat.RichText)
+        self.lbl_user_expires.setStyleSheet("color: #E2E8F0; font-size: 13px;")
+
+        metrics_row.addWidget(self.lbl_user_name)
+        metrics_row.addWidget(self.lbl_user_quota)
+        metrics_row.addWidget(self.lbl_user_expires)
+        metrics_row.addStretch()
+
+        # Quota Progress Bar
+        self.quota_bar = QProgressBar()
+        self.quota_bar.setRange(0, 100)
+        self.quota_bar.setValue(0)
+        self.quota_bar.setFixedHeight(8)
+        self.quota_bar.setTextVisible(False)
+
+        acct_layout.addLayout(acct_header_row)
+        acct_layout.addLayout(metrics_row)
+        acct_layout.addWidget(self.quota_bar)
+
+        layout.addWidget(self.card_account)
+
+        # Initial fetch if key exists
+        if SettingsManager.get("hubcap_api_key", ""):
+            self._fetch_account_stats()
+        # SteamGridDB Group
+        group_sgdb = QGroupBox("SteamGridDB (High-Res 600x900 Covers — Optional)")
+        sgdb_layout = QVBoxLayout(group_sgdb)
+        sgdb_layout.setSpacing(8)
+
+        self.input_sgdb_key = QLineEdit()
+        self.input_sgdb_key.setPlaceholderText("Paste your SteamGridDB API key here (Optional)...")
+        self.input_sgdb_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.input_sgdb_key.setText(SettingsManager.get("steamgriddb_api_key", ""))
+
+        sgdb_desc = QLabel("Automatically downloads high-resolution vertical grid posters instead of generic Steam banners.")
+        sgdb_desc.setStyleSheet("color: #64748B; font-size: 12px;")
+
+        sgdb_layout.addWidget(self.input_sgdb_key)
         sgdb_layout.addWidget(sgdb_desc)
+        layout.addWidget(group_sgdb)
+
+        # =====================================================================
+        # STEP-BY-STEP INSTRUCTIONS GUIDE CARD
+        # =====================================================================
+        guide_card = QFrame()
+        guide_card.setObjectName("SurfaceCard")
+        guide_card.setStyleSheet("""
+            QFrame#SurfaceCard {
+                background-color: #111420;
+                border: 1px solid #1F253C;
+                border-radius: 12px;
+                padding: 16px;
+            }
+        """)
+        guide_layout = QVBoxLayout(guide_card)
+        guide_layout.setSpacing(12)
+
+        guide_header = QLabel("📖   How to Get Your API Keys (Step-by-Step Guide)")
+        guide_header.setStyleSheet("font-size: 14px; font-weight: 800; color: #818CF8;")
+        guide_layout.addWidget(guide_header)
+
+        guide_text = QLabel(
+            "<b>1. How to get Hubcap API Key (Required for downloading games):</b><br>"
+            "&nbsp;&nbsp;• <b>Step 1:</b> Visit <b>https://hubcapmanifest.com/</b> in your web browser.<br>"
+            "&nbsp;&nbsp;• <b>Step 2:</b> Click the <b>Login</b> button in the top-right corner to sign in with Discord or GitHub.<br>"
+            "&nbsp;&nbsp;• <b>Step 3:</b> Click your profile avatar in the top-right and select <b>API Keys</b>.<br>"
+            "&nbsp;&nbsp;• <b>Step 4:</b> Click <b>'Generate New Key'</b>, copy the generated token, and paste it into the <b>Hubcap Manifest API</b> field above.<br><br>"
+            "<b>2. How to get SteamGridDB API Key (For high-resolution cover artwork — Optional):</b><br>"
+            "&nbsp;&nbsp;• <b>Step 1:</b> Visit <b>https://www.steamgriddb.com/</b> in your web browser.<br>"
+            "&nbsp;&nbsp;• <b>Step 2:</b> Log in using your Steam account.<br>"
+            "&nbsp;&nbsp;• <b>Step 3:</b> Open your profile dropdown and navigate to <b>Preferences → API</b>.<br>"
+            "&nbsp;&nbsp;• <b>Step 4:</b> Click <b>'Generate API Key'</b>, copy your personal key, and paste it into the <b>SteamGridDB</b> field above."
+        )
+        guide_text.setTextFormat(Qt.TextFormat.RichText)
+        guide_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        guide_text.setStyleSheet("color: #94A3B8; font-size: 12px; line-height: 1.6;")
+        guide_text.setWordWrap(True)
+        guide_layout.addWidget(guide_text)
+
+        layout.addWidget(guide_card)
+        layout.addStretch()
+
+        scroll.setWidget(container)
         
-        self.sgdb_key_input = QLineEdit()
-        self.sgdb_key_input.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit)
-        self.sgdb_key_input.setText(SettingsManager.get("steamgriddb_api_key", ""))
-        self.sgdb_key_input.setPlaceholderText("SteamGridDB API Key...")
-        sgdb_layout.addWidget(self.sgdb_key_input)
-        sgdb_group.setLayout(sgdb_layout)
-        layout.addWidget(sgdb_group)
-        
-        
-        self.auto_upload_cb = QCheckBox("Automatically upload new config keys to Hubcap")
-        self.auto_upload_cb.setChecked(SettingsManager.get("auto_upload_keys", True))
-        api_layout.addWidget(self.auto_upload_cb)
-        
-        api_group.setLayout(api_layout)
-        layout.addWidget(api_group)
-        
-        # Tool Mode
-        mode_group = QGroupBox("Tool Mode")
-        mode_layout = QVBoxLayout()
-        self.radio_std = QRadioButton("Standard download mode - lua goes to stplug-in")
-        self.radio_st = QRadioButton("SteamTools mode - downloads only .lua files")
-        self.radio_dd = QRadioButton("DepotDownloader mode")
-        
-        dl_method = SettingsManager.get("download_method", "steam")
-        st_mode = SettingsManager.get("steamtools_mode", False)
-        
-        if dl_method == "ddmod":
-            self.radio_dd.setChecked(True)
-        elif st_mode:
-            self.radio_st.setChecked(True)
+        main_page_layout = QVBoxLayout(self.page_api)
+        main_page_layout.setContentsMargins(0, 0, 0, 0)
+        main_page_layout.addWidget(scroll)
+
+    def _toggle_key_visibility(self) -> None:
+        if self.input_hubcap_key.echoMode() == QLineEdit.EchoMode.Password:
+            self.input_hubcap_key.setEchoMode(QLineEdit.EchoMode.Normal)
+            self.btn_show_key.setText("Hide Key")
         else:
-            self.radio_std.setChecked(True)
-        
-        mode_layout.addWidget(self.radio_std)
-        mode_layout.addWidget(self.radio_st)
-        mode_layout.addWidget(self.radio_dd)
-        mode_group.setLayout(mode_layout)
-        layout.addWidget(mode_group)
-        
-    def _setup_steam_downloads_page(self) -> None:
-        sd_layout = QFormLayout(self.page_steam_downloads)
-        sd_layout.setSpacing(15)
-        
-        steam_path = SettingsManager.get("steam_path", "")
-        if not steam_path:
-            detected = get_steam_path()
-            if detected:
-                steam_path = str(detected)
-                SettingsManager.set("steam_path", steam_path)
+            self.input_hubcap_key.setEchoMode(QLineEdit.EchoMode.Password)
+            self.btn_show_key.setText("Show Key")
 
-        steam_path_layout = QHBoxLayout()
-        self.steam_path_input = QLineEdit()
-        self.steam_path_input.setText(steam_path)
-        
-        self.btn_auto_detect = QPushButton("Auto Detect")
-        self.btn_auto_detect.clicked.connect(self._auto_detect_steam)
-        
-        self.btn_browse_steam = QPushButton("Browse")
-        self.btn_browse_steam.clicked.connect(self._browse_steam_path)
-        
-        steam_path_layout.addWidget(self.steam_path_input)
-        steam_path_layout.addWidget(self.btn_auto_detect)
-        steam_path_layout.addWidget(self.btn_browse_steam)
-        
-        sd_layout.addRow(QLabel("Steam Installation Path:"), steam_path_layout)
-        
-        self.downloads_folder_input = QLineEdit()
-        self.downloads_folder_input.setText(SettingsManager.get("downloads_folder", ""))
-        self.downloads_folder_input.setPlaceholderText("Default: ~/Downloads")
-        sd_layout.addRow(QLabel("Downloads Folder:"), self.downloads_folder_input)
-        
-        self.cb_auto_install = QCheckBox("Auto-install after download completes")
-        self.cb_auto_install.setChecked(SettingsManager.get("auto_install", True))
-        
-        self.cb_delete_zip = QCheckBox("Delete ZIP file after installation")
-        self.cb_delete_zip.setChecked(SettingsManager.get("delete_zip", False))
-        
-        self.cb_os_filter = QCheckBox("Disable depot OS filtering")
-        self.cb_os_filter.setChecked(SettingsManager.get("disable_os_filter", False))
-
-        sd_layout.addRow(self.cb_auto_install)
-        sd_layout.addRow(self.cb_delete_zip)
-        sd_layout.addRow(self.cb_os_filter)
-
-    def _browse_steam_path(self) -> None:
-        dir_path = QFileDialog.getExistingDirectory(self, "Select Steam Directory")
-        if dir_path:
-            self.steam_path_input.setText(dir_path)
-
-    def _auto_detect_steam(self) -> None:
-        from src.utils.paths import get_steam_path
-        path = get_steam_path()
-        if path:
-            self.steam_path_input.setText(str(path))
-            QMessageBox.information(self, "Success", f"Steam path detected:\n{path}")
-        else:
-            QMessageBox.warning(self, "Not Found", "Could not automatically detect Steam installation (Native or Flatpak).")
-
-    def _setup_advanced_page(self) -> None:
-        layout = QVBoxLayout(self.page_advanced)
-        layout.setAlignment(Qt.AlignTop)
-        layout.setSpacing(20)
-        
-        title = QLabel("Advanced Tools")
-        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #FFFFFF;")
-        layout.addWidget(title)
-
-        # 2. SLSsteam / Headcrab Installer
-        group_sls = QGroupBox("SLSsteam (Headcrab) Installer")
-        group_sls.setStyleSheet("QGroupBox { border: 1px solid #333; border-radius: 6px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px; }")
-        sls_layout = QVBoxLayout(group_sls)
-        sls_layout.setSpacing(10)
-
-        self.lbl_sls_status = QLabel("Status: Checking...")
-        self.lbl_sls_status.setStyleSheet("font-weight: bold;")
-        sls_layout.addWidget(self.lbl_sls_status)
-
-        sls_btn_layout = QHBoxLayout()
-        self.btn_install_sls = QPushButton("Install / Update SLSsteam")
-        self.btn_install_sls.setProperty("cssClass", "PrimaryAction")
-        self.btn_install_sls.clicked.connect(self._install_slssteam)
-        
-        self.btn_uninstall_sls = QPushButton("Uninstall")
-        self.btn_uninstall_sls.setStyleSheet("background-color: #F44336; color: white;")
-        self.btn_uninstall_sls.clicked.connect(self._uninstall_slssteam)
-        
-        sls_btn_layout.addWidget(self.btn_install_sls)
-        sls_btn_layout.addWidget(self.btn_uninstall_sls)
-        sls_layout.addLayout(sls_btn_layout)
-
-        layout.addWidget(group_sls)
-
-        # 3. DDMod Installer
-        group_ddmod = QGroupBox("DDMod (DepotDownloaderMod) Installer")
-        group_ddmod.setStyleSheet("QGroupBox { border: 1px solid #333; border-radius: 6px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px; }")
-        ddmod_layout = QVBoxLayout(group_ddmod)
-        ddmod_layout.setSpacing(10)
-
-        self.lbl_ddmod_status = QLabel("Status: Checking...")
-        self.lbl_ddmod_status.setStyleSheet("font-weight: bold;")
-        ddmod_layout.addWidget(self.lbl_ddmod_status)
-
-        ddmod_btn_layout = QHBoxLayout()
-        self.btn_install_ddmod = QPushButton("Install / Update DDMod")
-        self.btn_install_ddmod.setProperty("cssClass", "PrimaryAction")
-        self.btn_install_ddmod.clicked.connect(self._install_ddmod)
-        
-        self.btn_uninstall_ddmod = QPushButton("Uninstall")
-        self.btn_uninstall_ddmod.setStyleSheet("background-color: #F44336; color: white;")
-        self.btn_uninstall_ddmod.clicked.connect(self._uninstall_ddmod)
-        
-        ddmod_btn_layout.addWidget(self.btn_install_ddmod)
-        ddmod_btn_layout.addWidget(self.btn_uninstall_ddmod)
-        ddmod_layout.addLayout(ddmod_btn_layout)
-
-        layout.addWidget(group_ddmod)
-        
-        self._check_advanced_status()
-
-    def _check_advanced_status(self) -> None:
-        sls_dir = Path.home() / ".local" / "share" / "SLSsteam"
-        has_sls = sls_dir.exists() and any(sls_dir.glob("*.so"))
-        if has_sls:
-            self.lbl_sls_status.setText("SLSsteam Status: Installed")
-            self.lbl_sls_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
-        else:
-            self.lbl_sls_status.setText("SLSsteam Status: Not Installed")
-            self.lbl_sls_status.setStyleSheet("color: #F44336; font-weight: bold;")
-
-        ddmod_path = SettingsManager.get("depotdownloadermod_path", "")
-        if ddmod_path and Path(ddmod_path).exists():
-            self.lbl_ddmod_status.setText("DDMod Status: Installed")
-            self.lbl_ddmod_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
-        else:
-            self.lbl_ddmod_status.setText("DDMod Status: Not Installed")
-            self.lbl_ddmod_status.setStyleSheet("color: #F44336; font-weight: bold;")
-
-    def _install_slssteam(self) -> None:
-        self.btn_install_sls.setText("Installing...")
-        self.btn_install_sls.setEnabled(False)
-        loop = get_async_loop()
-        loop.create_task(self._run_sls_installer())
-
-    async def _run_sls_installer(self) -> None:
-        try:
-            await SLSsteamInstaller.update_slssteam()
-            self._check_advanced_status()
-        except Exception as e:
-            print(f"SLSsteam Installer error: {e}")
-        finally:
-            self.btn_install_sls.setText("Install / Update SLSsteam")
-            self.btn_install_sls.setEnabled(True)
-
-    def _uninstall_slssteam(self) -> None:
-        self.btn_uninstall_sls.setText("Uninstalling...")
-        self.btn_uninstall_sls.setEnabled(False)
-        loop = get_async_loop()
-        loop.create_task(self._run_sls_uninstaller())
-
-    async def _run_sls_uninstaller(self) -> None:
-        try:
-            await SLSsteamInstaller.uninstall_slssteam()
-            self._check_advanced_status()
-        except Exception as e:
-            print(f"SLSsteam Uninstaller error: {e}")
-        finally:
-            self.btn_uninstall_sls.setText("Uninstall")
-            self.btn_uninstall_sls.setEnabled(True)
-
-    def _install_ddmod(self) -> None:
-        self.btn_install_ddmod.setText("Installing...")
-        self.btn_install_ddmod.setEnabled(False)
-        loop = get_async_loop()
-        loop.create_task(self._run_ddmod_installer())
-
-    async def _run_ddmod_installer(self) -> None:
-        try:
-            await DDModInstaller.update_ddmod()
-            self._check_advanced_status()
-        except Exception as e:
-            print(f"DDMod Installer error: {e}")
-        finally:
-            self.btn_install_ddmod.setText("Install / Update DDMod")
-            self.btn_install_ddmod.setEnabled(True)
-
-    def _uninstall_ddmod(self) -> None:
-        self.btn_uninstall_ddmod.setText("Uninstalling...")
-        self.btn_uninstall_ddmod.setEnabled(False)
-        loop = get_async_loop()
-        loop.create_task(self._run_ddmod_uninstaller())
-
-    async def _run_ddmod_uninstaller(self) -> None:
-        try:
-            await DDModInstaller.uninstall_ddmod()
-            self._check_advanced_status()
-        except Exception as e:
-            print(f"DDMod Uninstaller error: {e}")
-        finally:
-            self.btn_uninstall_ddmod.setText("Uninstall")
-            self.btn_uninstall_ddmod.setEnabled(True)
-
-    def _validate_api_key(self) -> None:
-        key = self.api_key_input.text().strip()
-        if not key.startswith("smm_"):
-            QMessageBox.warning(self, "Validation Failed", "API Key must start with 'smm_'")
+    def _test_hubcap_key(self) -> None:
+        key = self.input_hubcap_key.text().strip()
+        if not key:
+            self.lbl_hubcap_status.setText("❌  Please enter a key first.")
+            self.lbl_hubcap_status.setStyleSheet("color: #F87171;")
             return
 
-        old_key = SettingsManager.get("hubcap_api_key", "")
-        SettingsManager.set("hubcap_api_key", key)
-        hubcap_api._client = None  # force rebuild with new key
+        self.lbl_hubcap_status.setText("⏳  Testing connection...")
+        self.lbl_hubcap_status.setStyleSheet("color: #818CF8;")
+        self.btn_test_key.setEnabled(False)
 
-        async def run_validation():
-            try:
-                data = await hubcap_api.get_user_stats()
-                QMessageBox.information(
-                    self, "Success",
-                    f"API Key is valid!\nPlan: {data.get('plan', 'N/A')}\nDaily limit: {data.get('daily_limit', 'N/A')}"
-                )
-            except Exception as e:
-                SettingsManager.set("hubcap_api_key", old_key)
-                hubcap_api._client = None
-                QMessageBox.critical(self, "Validation Failed", f"Could not validate API Key:\n{e}")
+        loop = get_async_loop()
+        loop.create_task(self._async_test_hubcap(key))
 
-        get_async_loop().create_task(run_validation())
+    async def _async_test_hubcap(self, key: str) -> None:
+        try:
+            valid = await hubcap_api.validate_key(key)
+            if valid:
+                self.lbl_hubcap_status.setText("✓  API Key is valid and active!")
+                self.lbl_hubcap_status.setStyleSheet("color: #34D399;")
+                await self._async_fetch_account_stats()
+            else:
+                self.lbl_hubcap_status.setText("❌  Invalid API key.")
+                self.lbl_hubcap_status.setStyleSheet("color: #F87171;")
+        except Exception as e:
+            self.lbl_hubcap_status.setText(f"❌  Connection Error: {e}")
+            self.lbl_hubcap_status.setStyleSheet("color: #F87171;")
+        finally:
+            self.btn_test_key.setEnabled(True)
 
-    def _save_settings(self) -> None:
-        SettingsManager.set("hubcap_api_key", self.api_key_input.text().strip())
-        SettingsManager.set("steamgriddb_api_key", self.sgdb_key_input.text().strip())
-        SettingsManager.set("auto_upload_keys", self.auto_upload_cb.isChecked())
-        SettingsManager.set("steamtools_mode", self.radio_st.isChecked())
-        SettingsManager.set("steam_path", self.steam_path_input.text())
-        SettingsManager.set("downloads_folder", self.downloads_folder_input.text())
-        SettingsManager.set("auto_install", self.cb_auto_install.isChecked())
-        SettingsManager.set("delete_zip", self.cb_delete_zip.isChecked())
-        SettingsManager.set("disable_os_filter", self.cb_os_filter.isChecked())
+    def _fetch_account_stats(self) -> None:
+        loop = get_async_loop()
+        loop.create_task(self._async_fetch_account_stats())
 
-        # DepotDownloader mode check
+    async def _async_fetch_account_stats(self) -> None:
+        try:
+            stats = await hubcap_api.get_user_stats()
+            username = stats.get("username", "Unknown")
+            used = stats.get("daily_usage", 0)
+            limit = stats.get("daily_limit", 25)
+            expires = stats.get("api_key_expires_at", "")
+            if expires:
+                expires = expires.split("T")[0]
+            else:
+                expires = "Never"
 
-        if self.radio_dd.isChecked():
-            SettingsManager.set("download_method", "ddmod")
+            self.lbl_user_name.setText(f"<b>Username:</b> <span style='color: #818CF8;'>{username}</span>")
+            self.lbl_user_quota.setText(f"<b>Daily Quota:</b> <span style='color: #34D399;'>{used} / {limit} Used</span>")
+            self.lbl_user_expires.setText(f"<b>Key Expires:</b> <span style='color: #94A3B8;'>{expires}</span>")
+
+            if limit > 0:
+                pct = int((used / limit) * 100)
+                self.quota_bar.setValue(pct)
+        except Exception as e:
+            self.lbl_user_name.setText(f"<b>Account:</b> Error ({e})")
+    # =========================================================================
+    def _setup_steam_page(self) -> None:
+        layout = QVBoxLayout(self.page_steam)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(18)
+
+        title = QLabel("Steam & Download Engine")
+        title.setProperty("cssClass", "HeaderTitle")
+        sub = QLabel("Configure your Steam directory and high-speed depot downloader.")
+        sub.setProperty("cssClass", "SubHeader")
+        layout.addWidget(title)
+        layout.addWidget(sub)
+
+        # Steam Path Group
+        group_path = QGroupBox("Steam Installation Directory")
+        path_layout = QVBoxLayout(group_path)
+        path_layout.setSpacing(10)
+
+        self.input_steam_path = QLineEdit()
+        self.input_steam_path.setPlaceholderText("Path to Steam directory...")
+        current_path = SettingsManager.get("steam_path", "") or (str(get_steam_path()) if get_steam_path() else "")
+        self.input_steam_path.setText(current_path)
+
+        path_btn_row = QHBoxLayout()
+        btn_browse = QPushButton("📁   Browse")
+        btn_browse.setProperty("cssClass", "SecondaryAction")
+        btn_browse.clicked.connect(self._browse_steam_path)
+
+        btn_autodetect = QPushButton("🔍   Auto Detect")
+        btn_autodetect.setProperty("cssClass", "SecondaryAction")
+        btn_autodetect.clicked.connect(self._autodetect_steam_path)
+
+        path_btn_row.addWidget(btn_browse)
+        path_btn_row.addWidget(btn_autodetect)
+        path_btn_row.addStretch()
+
+        path_layout.addWidget(self.input_steam_path)
+        path_layout.addLayout(path_btn_row)
+        layout.addWidget(group_path)
+
+        # Download Engine Info Card
+        engine_card = QFrame()
+        engine_card.setObjectName("SurfaceCard")
+        engine_card_layout = QVBoxLayout(engine_card)
+        engine_card_layout.setSpacing(8)
+
+        engine_title = QLabel("⚡   Download Engine: DepotDownloaderMod (Active)")
+        engine_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #FFFFFF;")
+        
+        engine_desc = QLabel(
+            "Game Launcher uses a standalone Linux-x64 build of DepotDownloaderMod. "
+            "It downloads manifests and game files directly at maximum network speed without needing external dependencies."
+        )
+        engine_desc.setStyleSheet("color: #94A3B8; font-size: 12px; line-height: 1.4;")
+        engine_desc.setWordWrap(True)
+
+        engine_card_layout.addWidget(engine_title)
+        engine_card_layout.addWidget(engine_desc)
+        layout.addWidget(engine_card)
+
+        layout.addStretch()
+
+    def _browse_steam_path(self) -> None:
+        current = self.input_steam_path.text().strip() or str(Path.home())
+        chosen = QFileDialog.getExistingDirectory(self, "Select Steam Directory", current)
+        if chosen:
+            self.input_steam_path.setText(chosen)
+
+    def _autodetect_steam_path(self) -> None:
+        from src.utils.paths import get_steam_path
+        detected = get_steam_path()
+        if detected:
+            self.input_steam_path.setText(str(detected))
+            QMessageBox.information(self, "Auto-Detect", f"Found Steam at:\n{detected}")
         else:
-            SettingsManager.set("download_method", "steam")
-            
+            QMessageBox.warning(self, "Auto-Detect", "Could not automatically find Steam directory.")
+
+    # =========================================================================
+    # 3. ADVANCED TOOLS PAGE
+    # =========================================================================
+    def _setup_tools_page(self) -> None:
+        layout = QVBoxLayout(self.page_tools)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(18)
+
+        title = QLabel("Advanced Tools & Helpers")
+        title.setProperty("cssClass", "HeaderTitle")
+        sub = QLabel("Install required runtime components and management tools.")
+        sub.setProperty("cssClass", "SubHeader")
+        layout.addWidget(title)
+        layout.addWidget(sub)
+        # SLSsteam Card
+        card_sls = QFrame()
+        card_sls.setObjectName("SurfaceCard")
+        sls_layout = QVBoxLayout(card_sls)
+        sls_layout.setSpacing(10)
+
+        sls_header_row = QHBoxLayout()
+        sls_title = QLabel("⚡   SLSsteam (h3adcr-b tool)")
+        sls_title.setStyleSheet("font-size: 15px; font-weight: 700; color: #FFFFFF;")
+        
+        self.lbl_sls_status = QLabel("●  Checking...")
+        self.lbl_sls_status.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 700;")
+        
+        sls_header_row.addWidget(sls_title)
+        sls_header_row.addStretch()
+        sls_header_row.addWidget(self.lbl_sls_status)
+
+        sls_desc = QLabel("Required for Steam to recognize manifest unlocks and apply DLL proxying.")
+        sls_desc.setStyleSheet("color: #94A3B8; font-size: 12px;")
+
+        sls_btn_row = QHBoxLayout()
+        btn_install_sls = QPushButton("Install / Update SLSsteam")
+        btn_install_sls.setProperty("cssClass", "PrimaryAction")
+        btn_install_sls.clicked.connect(self._install_slssteam)
+
+        btn_uninstall_sls = QPushButton("Uninstall SLSsteam")
+        btn_uninstall_sls.setProperty("cssClass", "DangerAction")
+        btn_uninstall_sls.clicked.connect(self._uninstall_slssteam)
+
+        sls_btn_row.addWidget(btn_install_sls)
+        sls_btn_row.addWidget(btn_uninstall_sls)
+        sls_btn_row.addStretch()
+
+        sls_layout.addLayout(sls_header_row)
+        sls_layout.addWidget(sls_desc)
+        sls_layout.addLayout(sls_btn_row)
+        layout.addWidget(card_sls)
+
+        # DDMod Card
+        card_ddm = QFrame()
+        card_ddm.setObjectName("SurfaceCard")
+        ddm_layout = QVBoxLayout(card_ddm)
+        ddm_layout.setSpacing(10)
+
+        ddm_header_row = QHBoxLayout()
+        ddm_title = QLabel("📥   DepotDownloaderMod (Standalone Linux-x64)")
+        ddm_title.setStyleSheet("font-size: 15px; font-weight: 700; color: #FFFFFF;")
+
+        self.lbl_ddm_status = QLabel("●  Checking...")
+        self.lbl_ddm_status.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 700;")
+
+        ddm_header_row.addWidget(ddm_title)
+        ddm_header_row.addStretch()
+        ddm_header_row.addWidget(self.lbl_ddm_status)
+
+        ddm_desc = QLabel("Self-contained Linux executable. Does not require .NET installed on your system.")
+        ddm_desc.setStyleSheet("color: #94A3B8; font-size: 12px;")
+
+        ddm_btn_row = QHBoxLayout()
+        btn_install_ddm = QPushButton("Install / Update DDMod")
+        btn_install_ddm.setProperty("cssClass", "PrimaryAction")
+        btn_install_ddm.clicked.connect(self._install_ddmod)
+
+        btn_uninstall_ddm = QPushButton("Uninstall DDMod")
+        btn_uninstall_ddm.setProperty("cssClass", "DangerAction")
+        btn_uninstall_ddm.clicked.connect(self._uninstall_ddmod)
+
+        ddm_btn_row.addWidget(btn_install_ddm)
+        ddm_btn_row.addWidget(btn_uninstall_ddm)
+        ddm_btn_row.addStretch()
+
+        ddm_layout.addLayout(ddm_header_row)
+        ddm_layout.addWidget(ddm_desc)
+        ddm_layout.addLayout(ddm_btn_row)
+        layout.addWidget(card_ddm)
+
+        layout.addStretch()
+        self._update_tools_status()
+
+    def _update_tools_status(self) -> None:
+        # 1. Check SLSsteam status
+        sls_paths = [
+            Path.home() / ".local" / "share" / "SLSsteam",
+            Path.home() / ".var" / "app" / "com.valvesoftware.Steam" / ".local" / "share" / "SLSsteam",
+            Path.home() / ".config" / "SLSsteam",
+        ]
+        if any(p.exists() for p in sls_paths):
+            self.lbl_sls_status.setText("●  Installed")
+            self.lbl_sls_status.setStyleSheet("color: #34D399; font-size: 11px; font-weight: 700;")
+        else:
+            self.lbl_sls_status.setText("○  Not Installed")
+            self.lbl_sls_status.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 700;")
+
+        # 2. Check DDMod status
+        ddm_path = SettingsManager.get("depotdownloadermod_path", "")
+        if ddm_path and Path(ddm_path).exists():
+            self.lbl_ddm_status.setText("●  Installed")
+            self.lbl_ddm_status.setStyleSheet("color: #34D399; font-size: 11px; font-weight: 700;")
+        else:
+            self.lbl_ddm_status.setText("○  Not Installed")
+            self.lbl_ddm_status.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 700;")
+
+    def _install_slssteam(self) -> None:
+        steam_path = self.input_steam_path.text().strip() or str(get_steam_path() or "")
+        if not steam_path:
+            QMessageBox.warning(self, "Error", "Please set your Steam path first.")
+            return
+
+        def _on_log(msg):
+            pass
+
+        def _on_done(success):
+            self._update_tools_status()
+            if success:
+                QMessageBox.information(self, "Success", "SLSsteam installed successfully!\nPlease restart Steam.")
+            else:
+                QMessageBox.critical(self, "Error", "Failed to install SLSsteam. Check console output.")
+
+        SLSsteamInstaller.run_installer_async(Path(steam_path), _on_log, _on_done)
+
+    def _uninstall_slssteam(self) -> None:
+        reply = QMessageBox.question(
+            self, "Uninstall SLSsteam",
+            "Are you sure you want to completely remove SLSsteam and its configurations?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        loop = get_async_loop()
+        async def _async_uninstall():
+            try:
+                await SLSsteamInstaller.uninstall_slssteam()
+                self._update_tools_status()
+                QMessageBox.information(self, "Success", "SLSsteam has been uninstalled successfully.\nPlease restart Steam.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to uninstall SLSsteam: {e}")
+        loop.create_task(_async_uninstall())
+
+    def _install_ddmod(self) -> None:
+        def _on_log(msg):
+            pass
+
+        def _on_done(success, err):
+            self._update_tools_status()
+            if success:
+                QMessageBox.information(self, "Success", "DDMod installed successfully!\nDepotDownloader is ready to use.")
+            else:
+                QMessageBox.critical(self, "Error", f"Failed to install DDMod: {err}")
+
+        DDModInstaller.run_installer_async(_on_log, _on_done)
+
+    def _uninstall_ddmod(self) -> None:
+        reply = QMessageBox.question(
+            self, "Uninstall DDMod",
+            "Are you sure you want to remove the standalone DepotDownloaderMod binary?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        loop = get_async_loop()
+        async def _async_uninstall():
+            try:
+                await DDModInstaller.uninstall_ddmod()
+                self._update_tools_status()
+                QMessageBox.information(self, "Success", "DepotDownloaderMod has been removed.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to uninstall DDMod: {e}")
+        loop.create_task(_async_uninstall())
+    # =========================================================================
+    # SAVE SETTINGS
+    # =========================================================================
+    def _save_settings(self) -> None:
+        SettingsManager.set("hubcap_api_key", self.input_hubcap_key.text().strip())
+        SettingsManager.set("steamgriddb_api_key", self.input_sgdb_key.text().strip())
+        
+        steam_p = self.input_steam_path.text().strip()
+        if steam_p:
+            SettingsManager.set("steam_path", steam_p)
+
+        SettingsManager.set("download_method", "ddmod")
+
+        SettingsManager.save()
+        hubcap_api.clear_cache()
         self.accept()

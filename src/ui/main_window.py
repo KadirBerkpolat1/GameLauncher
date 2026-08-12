@@ -1,23 +1,29 @@
+import subprocess
 from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-                                 QPushButton, QStackedWidget, QLabel, QSpacerItem, QSizePolicy, QButtonGroup)
-from PySide6.QtCore import Qt, QSize
+                               QPushButton, QStackedWidget, QLabel, QSpacerItem, 
+                               QSizePolicy, QButtonGroup, QFrame)
+from PySide6.QtCore import Qt, QTimer
+
 from src.ui.search_widget import SearchWidget
 from src.ui.library_widget import LibraryWidget
 from src.ui.downloads_widget import DownloadsWidget
 from src.ui.settings_dialog import SettingsDialog
 from src.ui.hubcap_tools_widget import HubcapToolsWidget
 
+
 class MainWindow(QMainWindow):
     """
-    The main application window, featuring a sidebar and a main content area.
+    The redesigned main application window featuring a sleek cyber-dark sidebar,
+    live Steam status monitor, categorized views, and smooth view switching.
     """
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Nebula Launcher")
-        self.resize(1200, 800)
-        self.setMinimumSize(900, 600)
+        self.setWindowTitle("Nebula Game Launcher")
+        self.resize(1280, 840)
+        self.setMinimumSize(980, 660)
 
         self.init_ui()
+        self._start_steam_monitor()
 
     def init_ui(self) -> None:
         central_widget = QWidget()
@@ -27,27 +33,74 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # --- Sidebar ---
+        # =====================================================================
+        # SIDEBAR
+        # =====================================================================
         sidebar = QWidget()
         sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(240)
+        sidebar.setFixedWidth(260)
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(0, 20, 0, 20)
-        sidebar_layout.setSpacing(5)
+        sidebar_layout.setContentsMargins(0, 24, 0, 20)
+        sidebar_layout.setSpacing(6)
 
-        # Profile / Logo area placeholder
-        logo_label = QLabel("<h2><span style='color: #818CF8;'>✦</span> NEBULA</h2>")
-        logo_label.setStyleSheet("color: #F8FAFC; font-weight: 900; padding-left: 12px; padding-bottom: 24px; padding-top: 10px; letter-spacing: 3px; font-size: 16px;")
-        logo_label.setTextFormat(Qt.TextFormat.RichText)
-        sidebar_layout.addWidget(logo_label)
+        # App Brand & Logo - Clean modern typography
+        brand_container = QWidget()
+        brand_layout = QHBoxLayout(brand_container)
+        brand_layout.setContentsMargins(20, 0, 20, 18)
+        brand_layout.setSpacing(12)
 
-        # Navigation Buttons
-        self.btn_installer = self._create_nav_button("Installer")
-        self.btn_library = self._create_nav_button("Library")
-        self.btn_store = self._create_nav_button("Store")
-        self.btn_downloads = self._create_nav_button("Downloads")
-        self.btn_settings = self._create_nav_button("Settings")
-        self.btn_support = self._create_nav_button("Support")
+        logo_box = QLabel("✦")
+        logo_box.setFixedSize(34, 34)
+        logo_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_box.setStyleSheet("""
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #4F46E5, stop:1 #7C3AED);
+            color: #FFFFFF;
+            font-size: 16px;
+            border-radius: 8px;
+            border: 1px solid #818CF8;
+        """)
+
+        text_box = QVBoxLayout()
+        text_box.setSpacing(1)
+        text_box.setContentsMargins(0, 0, 0, 0)
+        
+        logo_title = QLabel("Nebula")
+        logo_title.setStyleSheet("""
+            color: #F8FAFC;
+            font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        """)
+        
+        subtitle = QLabel("GAME LAUNCHER")
+        subtitle.setStyleSheet("""
+            color: #818CF8;
+            font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        """)
+
+        text_box.addWidget(logo_title)
+        text_box.addWidget(subtitle)
+
+        brand_layout.addWidget(logo_box)
+        brand_layout.addLayout(text_box)
+        brand_layout.addStretch()
+
+        sidebar_layout.addWidget(brand_container)
+
+        # Navigation Section Label
+        nav_lbl = QLabel("MENU")
+        nav_lbl.setStyleSheet("color: #475569; font-size: 10px; font-weight: 800; padding: 6px 22px 2px 22px; letter-spacing: 1.2px;")
+        sidebar_layout.addWidget(nav_lbl)
+
+        # Nav Buttons with Icons
+        self.btn_installer = self._create_nav_button("📥   Installer")
+        self.btn_library = self._create_nav_button("🎮   My Library")
+        self.btn_store = self._create_nav_button("🛍️   Hubcap Store")
+        self.btn_downloads = self._create_nav_button("⚡   Downloads")
         
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
@@ -55,8 +108,6 @@ class MainWindow(QMainWindow):
         self.nav_group.addButton(self.btn_library)
         self.nav_group.addButton(self.btn_store)
         self.nav_group.addButton(self.btn_downloads)
-        self.nav_group.addButton(self.btn_settings)
-        self.nav_group.addButton(self.btn_support)
 
         sidebar_layout.addWidget(self.btn_installer)
         sidebar_layout.addWidget(self.btn_library)
@@ -65,34 +116,70 @@ class MainWindow(QMainWindow):
 
         sidebar_layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
+        # Bottom System Controls
+        sys_lbl = QLabel("SYSTEM")
+        sys_lbl.setStyleSheet("color: #475569; font-size: 10px; font-weight: 800; padding: 6px 22px 2px 22px; letter-spacing: 1.2px;")
+        sidebar_layout.addWidget(sys_lbl)
+
+        self.btn_settings = self._create_nav_button("⚙️   Settings")
+        self.btn_settings.clicked.connect(self._open_settings)
         sidebar_layout.addWidget(self.btn_settings)
-        sidebar_layout.addWidget(self.btn_support)
 
-
-        # Restart Steam Button (Pinned to bottom)
-        self.btn_restart_steam = QPushButton("Restart Steam")
-        self.btn_restart_steam.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_restart_steam.setStyleSheet("""
-            QPushButton {
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1E293B, stop:1 #334155);
-                color: #F8FAFC;
-                border: 1px solid #475569;
+        # Steam Status Unified Pill
+        self.steam_status_frame = QFrame()
+        self.steam_status_frame.setFixedHeight(40)
+        self.steam_status_frame.setStyleSheet("""
+            QFrame {
+                background-color: #121522;
+                border: 1px solid #1E243A;
                 border-radius: 8px;
-                padding: 12px 15px;
                 margin: 4px 12px;
-                font-weight: bold;
-                text-align: center;
-                letter-spacing: 0.5px;
-            }
-            QPushButton:hover {
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #334155, stop:1 #475569);
-                border: 1px solid #94A3B8;
             }
         """)
-        self.btn_restart_steam.clicked.connect(self._restart_steam)
+        status_layout = QHBoxLayout(self.steam_status_frame)
+        status_layout.setContentsMargins(12, 0, 12, 0)
+        status_layout.setSpacing(8)
+
+        self.steam_dot = QLabel("●")
+        self.steam_dot.setStyleSheet("color: #94A3B8; font-size: 12px;")
+        
+        self.steam_text = QLabel("Steam Offline")
+        self.steam_text.setStyleSheet("color: #94A3B8; font-size: 12px; font-weight: 600;")
+
+        status_layout.addWidget(self.steam_dot)
+        status_layout.addWidget(self.steam_text)
+        status_layout.addStretch()
+
+        sidebar_layout.addWidget(self.steam_status_frame)
+
+        # Restart Steam Button
+        self.btn_restart_steam = QPushButton("🔄   Restart Steam")
+        self.btn_restart_steam.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_restart_steam.setFixedHeight(42)
+        self.btn_restart_steam.setStyleSheet("""
+            QPushButton {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1E243A, stop:1 #283252);
+                color: #F8FAFC;
+                border: 1px solid #333F66;
+                border-radius: 8px;
+                padding: 6px 14px;
+                margin: 4px 12px;
+                font-weight: 700;
+                font-size: 13px;
+                text-align: center;
+                letter-spacing: 0.3px;
+            }
+            QPushButton:hover {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #283252, stop:1 #3B4A78);
+                border: 1px solid #6366F1;
+                color: #FFFFFF;
+            }
+        """)
         sidebar_layout.addWidget(self.btn_restart_steam)
 
-        # --- Main Content Area ---
+        # =====================================================================
+        # MAIN CONTENT AREA
+        # =====================================================================
         content_wrapper = QWidget()
         content_wrapper.setObjectName("MainContent")
         content_layout = QVBoxLayout(content_wrapper)
@@ -101,51 +188,36 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
 
         # Add Views
-        self.library_view = LibraryWidget()
-        self.search_view = SearchWidget()
-        self.downloads_view = DownloadsWidget()
-        self.hubcap_tools_view = HubcapToolsWidget()
-        
-        self.support_view = self._create_placeholder("Support")
+        self.hubcap_tools_view = HubcapToolsWidget()  # 0: Installer
+        self.library_view = LibraryWidget()           # 1: Library
+        self.search_view = SearchWidget()             # 2: Store / Search
+        self.downloads_view = DownloadsWidget()       # 3: Downloads
 
-        # Stack index map: 0:Installer 1:Library 2:Store 3:Downloads 4:Support
-        self.stack.addWidget(self.hubcap_tools_view)  # 0
-        self.stack.addWidget(self.library_view)       # 1
-        self.stack.addWidget(self.search_view)        # 2
-        self.stack.addWidget(self.downloads_view)     # 3
-        self.stack.addWidget(self.support_view)       # 4
+        self.stack.addWidget(self.hubcap_tools_view)
+        self.stack.addWidget(self.library_view)
+        self.stack.addWidget(self.search_view)
+        self.stack.addWidget(self.downloads_view)
 
+        # Connect Navigation
+        self.btn_installer.clicked.connect(lambda: self._switch_view(0))
+        self.btn_library.clicked.connect(lambda: self._switch_view(1))
+        self.btn_store.clicked.connect(lambda: self._switch_view(2))
+        self.btn_downloads.clicked.connect(lambda: self._switch_view(3))
 
-        # Default to Installer
-        self.btn_installer.setChecked(True)
-        self.stack.setCurrentIndex(0)
+        # Default view: Library
+        self.btn_library.setChecked(True)
+        self.stack.setCurrentIndex(1)
 
         content_layout.addWidget(self.stack)
 
-        # Add to main layout
+        # Add sidebar and content to main layout
         main_layout.addWidget(sidebar)
         main_layout.addWidget(content_wrapper)
 
-        # Connections
-        self.btn_installer.clicked.connect(lambda: self._switch_view(0, self.btn_installer))
-        self.btn_library.clicked.connect(lambda: self._switch_view(1, self.btn_library))
-        self.btn_store.clicked.connect(lambda: self._switch_view(2, self.btn_store))
-        self.btn_downloads.clicked.connect(lambda: self._switch_view(3, self.btn_downloads))
-        self.btn_support.clicked.connect(lambda: self._switch_view(4, self.btn_support))
-        self.btn_settings.clicked.connect(self._open_settings)
-        self.library_view.download_requested.connect(self._handle_download_request)
+        # Wire cross-widget signals
+        self.search_view.download_requested.connect(self._handle_download_requested)
+        self.library_view.download_requested.connect(self._handle_download_requested)
         self.library_view.restart_steam_requested.connect(self._restart_steam)
-
-    def _handle_download_request(self, app_id: int, title: str) -> None:
-        self._switch_view(3, self.btn_downloads)
-        self.downloads_view.start_download(app_id, title)
-    def _create_placeholder(self, text: str) -> QWidget:
-        w = QWidget()
-        layout = QVBoxLayout(w)
-        lbl = QLabel(f"{text} view is under construction.")
-        lbl.setAlignment(Qt.AlignCenter)
-        layout.addWidget(lbl)
-        return w
 
     def _create_nav_button(self, text: str) -> QPushButton:
         btn = QPushButton(text)
@@ -153,72 +225,59 @@ class MainWindow(QMainWindow):
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         return btn
 
-    def _switch_view(self, index: int, active_btn: QPushButton) -> None:
+    def _switch_view(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
-        # Refresh specific views when switched to
-        if index == 2:
-            self.library_view.load_library()
+        if index == 1:
+            self.library_view.refresh_library()
         elif index == 3:
-            self.search_view._load_library()
-        elif index == 4:
-            pass # active downloads don't need reload
-            
-        active_btn.setChecked(True)
+            self.downloads_view._load_history()
 
+    def _handle_download_requested(self, app_id: int, title: str) -> None:
+        self.btn_downloads.setChecked(True)
+        self.stack.setCurrentIndex(3)
+        self.downloads_view.start_download(app_id, title)
 
     def _open_settings(self) -> None:
-        # Settings is a dialog, so we don't switch the stack, we pop it open
-        self.btn_settings.setChecked(False) # Don't keep it checked
         dialog = SettingsDialog(self)
         dialog.exec()
+        self.library_view.refresh_library()
 
-    @staticmethod
-    def _is_steam_running() -> bool:
-        """Returns True if a Steam client process is running."""
-        import subprocess
-        res = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
-        return res.returncode == 0
+    def _start_steam_monitor(self) -> None:
+        """Polls Steam process status every 5 seconds to update the status pill."""
+        self._steam_timer = QTimer(self)
+        self._steam_timer.timeout.connect(self._update_steam_status)
+        self._steam_timer.start(5000)
+        self._update_steam_status()
+
+    def _update_steam_status(self) -> None:
+        try:
+            res = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
+            if res.returncode == 0:
+                self.steam_dot.setText("●")
+                self.steam_dot.setStyleSheet("color: #34D399; font-size: 12px;")
+                self.steam_text.setText("Steam Running")
+                self.steam_text.setStyleSheet("color: #34D399; font-size: 12px; font-weight: 600;")
+            else:
+                self.steam_dot.setText("●")
+                self.steam_dot.setStyleSheet("color: #94A3B8; font-size: 12px;")
+                self.steam_text.setText("Steam Offline")
+                self.steam_text.setStyleSheet("color: #94A3B8; font-size: 12px; font-weight: 600;")
+        except Exception:
+            pass
 
     def _restart_steam(self) -> None:
-        """Starts Steam if it is closed; otherwise shuts it down and starts it again."""
-        import subprocess
-        from PySide6.QtCore import QTimer
-        try:
-            self.btn_restart_steam.setText("Restarting...")
-            self.btn_restart_steam.setEnabled(False)
+        self.btn_restart_steam.setEnabled(False)
+        self.btn_restart_steam.setText("⏳   Closing Steam...")
 
-            if self._is_steam_running():
-                # Steam is running: shut it down gracefully, wait until it
-                # actually exits, then relaunch it.
-                subprocess.run(["steam", "-shutdown"], check=False)
-                self._shutdown_attempts = 0
-                QTimer.singleShot(1000, self._start_when_closed)
-            else:
-                # Steam is not running: just start it.
-                self._start_steam_again()
-        except Exception as e:
-            print(f"Failed to check/shutdown steam: {e}")
-            self.btn_restart_steam.setText("Restart Steam")
+        def _do_start():
+            subprocess.Popen(["steam"], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.btn_restart_steam.setText("🔄   Restart Steam")
             self.btn_restart_steam.setEnabled(True)
+            self._update_steam_status()
 
-    def _start_when_closed(self) -> None:
-        """Polls for Steam to finish shutting down, then relaunches it."""
-        from PySide6.QtCore import QTimer
-        self._shutdown_attempts += 1
-        if not self._is_steam_running() or self._shutdown_attempts >= 30:
-            self._start_steam_again()
-            return
-        QTimer.singleShot(1000, self._start_when_closed)
-
-    def _start_steam_again(self) -> None:
-        import subprocess
-        try:
-            # Start Steam in the background
-            subprocess.Popen(["steam"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            self.btn_restart_steam.setText("Restart Steam")
-            self.btn_restart_steam.setEnabled(True)
-        except Exception as e:
-            print(f"Failed to start steam: {e}")
-            self.btn_restart_steam.setText("Restart Steam")
-            self.btn_restart_steam.setEnabled(True)
-
+        res = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
+        if res.returncode == 0:
+            subprocess.run(["steam", "-shutdown"], check=False)
+            QTimer.singleShot(4000, _do_start)
+        else:
+            _do_start()

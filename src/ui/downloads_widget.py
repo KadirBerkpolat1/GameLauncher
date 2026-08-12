@@ -1,15 +1,15 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QGridLayout, QPushButton
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+                               QScrollArea, QPushButton, QFrame, QSizePolicy)
 from PySide6.QtCore import Qt
-from src.ui.game_card import GameCard
 from src.ui.active_download_widget import ActiveDownloadWidget
-from src.ui.flow_layout import FlowLayout
 from src.config.settings import SettingsManager
 from src.utils.async_utils import get_async_loop
 
+
 class DownloadsWidget(QWidget):
     """
-    Acts as a staging area (queue) for games the user wants to download.
-    Games added here are waiting to be installed to Steam and the Library.
+    Redesigned Downloads View featuring active task management,
+    real-time speedometer cards, and detailed download history log.
     """
     def __init__(self) -> None:
         super().__init__()
@@ -17,62 +17,76 @@ class DownloadsWidget(QWidget):
 
     def init_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setContentsMargins(28, 28, 28, 28)
         layout.setSpacing(20)
 
-        # --- Header ---
-        header_layout = QVBoxLayout()
-        header = QLabel("Active Downloads")
+        # =====================================================================
+        # HEADER & STATUS BANNER
+        # =====================================================================
+        header_layout = QHBoxLayout()
+
+        title_box = QVBoxLayout()
+        title_box.setSpacing(3)
+        header = QLabel("Downloads & Task Manager")
         header.setProperty("cssClass", "HeaderTitle")
-        
-        # Status Indicator
-        self.lbl_status = QLabel("Status: Idle")
-        self.lbl_status.setProperty("cssClass", "GameSubtitle")
-        self.lbl_status.setStyleSheet("color: #6366F1; font-weight: bold;")
-        
-        header_layout.addWidget(header)
-        header_layout.addWidget(self.lbl_status)
-        layout.addLayout(header_layout)
 
-        # --- Action Bar ---
-        action_bar = QWidget()
-        action_layout = QHBoxLayout(action_bar)
-        action_layout.setContentsMargins(0, 0, 0, 0)
-        # Removed combo_scope to use per-game DepotSelectionDialog
+        self.lbl_status = QLabel("⚡  Status: Idle (No active downloads)")
+        self.lbl_status.setStyleSheet("color: #818CF8; font-size: 13px; font-weight: 700;")
 
-        self.btn_clear_history = QPushButton("Clear History")
+        title_box.addWidget(header)
+        title_box.addWidget(self.lbl_status)
+        header_layout.addLayout(title_box)
+
+        header_layout.addStretch()
+
+        self.btn_clear_history = QPushButton("🗑  Clear History")
         self.btn_clear_history.setProperty("cssClass", "SecondaryAction")
         self.btn_clear_history.clicked.connect(self._clear_history)
-        action_layout.addStretch()
-        action_layout.addWidget(self.btn_clear_history)
-        layout.addWidget(action_bar)
+        header_layout.addWidget(self.btn_clear_history)
 
-        
+        layout.addLayout(header_layout)
+
+        # =====================================================================
+        # ACTIVE DOWNLOADS CONTAINER
+        # =====================================================================
+        active_lbl = QLabel("ACTIVE TASKS")
+        active_lbl.setStyleSheet("color: #64748B; font-size: 11px; font-weight: 800; letter-spacing: 1px;")
+        layout.addWidget(active_lbl)
+
         self.active_downloads_container = QWidget()
         self.active_downloads_layout = QVBoxLayout(self.active_downloads_container)
+        self.active_downloads_layout.setContentsMargins(0, 0, 0, 0)
+        self.active_downloads_layout.setSpacing(12)
         self.active_downloads_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        
+
         self.active_scroll = QScrollArea()
         self.active_scroll.setWidgetResizable(True)
-        self.active_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        self.active_scroll.setMaximumHeight(200)
+        self.active_scroll.setObjectName("ActiveScroll")
+        self.active_scroll.setMinimumHeight(120)
         self.active_scroll.setWidget(self.active_downloads_container)
-        self.active_scroll.hide() # Hide initially
         layout.addWidget(self.active_scroll)
 
-        # --- History Area ---
-        history_lbl = QLabel("Download History")
-        history_lbl.setProperty("cssClass", "GameTitle")
-        history_lbl.setStyleSheet("margin-top: 15px;")
+        # Empty active placeholder
+        self.empty_active_lbl = QLabel("No active downloads. Add games from the Store to begin.")
+        self.empty_active_lbl.setStyleSheet("color: #475569; font-size: 13px; font-style: italic; padding: 20px;")
+        self.empty_active_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.active_downloads_layout.addWidget(self.empty_active_lbl)
+
+        # =====================================================================
+        # DOWNLOAD HISTORY
+        # =====================================================================
+        history_lbl = QLabel("DOWNLOAD HISTORY")
+        history_lbl.setStyleSheet("color: #64748B; font-size: 11px; font-weight: 800; letter-spacing: 1px; margin-top: 10px;")
         layout.addWidget(history_lbl)
 
         self.history_scroll = QScrollArea()
         self.history_scroll.setWidgetResizable(True)
         self.history_scroll.setObjectName("HistoryScroll")
-        self.history_scroll.setMaximumHeight(150)
 
         self.history_container = QWidget()
         self.history_layout = QVBoxLayout(self.history_container)
+        self.history_layout.setContentsMargins(10, 10, 10, 10)
+        self.history_layout.setSpacing(8)
         self.history_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.history_scroll.setWidget(self.history_container)
@@ -81,7 +95,6 @@ class DownloadsWidget(QWidget):
         self._load_history()
 
     def _load_history(self) -> None:
-        from src.config.settings import SettingsManager
         history = SettingsManager.get("download_history", []) or []
         for i in reversed(range(self.history_layout.count())):
             item = self.history_layout.itemAt(i)
@@ -89,46 +102,82 @@ class DownloadsWidget(QWidget):
             if w:
                 self.history_layout.removeWidget(w)
                 w.deleteLater()
+
         if not history:
-            empty = QLabel("No downloads yet.")
-            empty.setProperty("cssClass", "GameSubtitle")
+            empty = QLabel("No previous downloads in history.")
+            empty.setStyleSheet("color: #475569; font-style: italic; padding: 15px;")
+            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.history_layout.addWidget(empty)
             return
-        for entry in reversed(history[-20:]):
-            status = entry.get("status", "Completed")
-            icon = "✓" if status == "Completed" else "✗"
-            item = QLabel(f"{icon} {entry.get('title', '')} - {status} ({entry.get('date', '')})")
-            item.setProperty("cssClass", "GameSubtitle")
-            self.history_layout.addWidget(item)
+
+        for record in reversed(history[-30:]): # Show last 30 entries
+            item_frame = QFrame()
+            item_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #121522;
+                    border: 1px solid #1E2337;
+                    border-radius: 8px;
+                    padding: 8px 14px;
+                }
+                QFrame:hover {
+                    background-color: #151928;
+                    border: 1px solid #283252;
+                }
+            """)
+            item_layout = QHBoxLayout(item_frame)
+            item_layout.setContentsMargins(4, 4, 4, 4)
+
+            title_lbl = QLabel(f"<b>{record.get('title', 'Unknown')}</b>  <span style='color: #64748B;'>(AppID: {record.get('app_id')})</span>")
+            title_lbl.setTextFormat(Qt.TextFormat.RichText)
+            
+            status = record.get("status", "Unknown")
+            if status == "Completed":
+                status_badge = QLabel("✓  Completed")
+                status_badge.setProperty("cssClass", "BadgeSuccess")
+            elif status == "Failed":
+                status_badge = QLabel("✕  Failed")
+                status_badge.setProperty("cssClass", "BadgeDanger")
+            else:
+                status_badge = QLabel(f"•  {status}")
+                status_badge.setProperty("cssClass", "BadgeWarning")
+
+            item_layout.addWidget(title_lbl)
+            item_layout.addStretch()
+            item_layout.addWidget(status_badge)
+
+            self.history_layout.addWidget(item_frame)
 
     def _remove_active_widget(self, widget) -> None:
-        """Removes a finished download row and hides the section when empty."""
         self.active_downloads_layout.removeWidget(widget)
         widget.deleteLater()
-        if self.active_downloads_layout.count() == 0:
-            self.active_scroll.hide()
+        
+        # Check active count
+        active_count = sum(1 for i in range(self.active_downloads_layout.count()) 
+                          if self.active_downloads_layout.itemAt(i).widget() != self.empty_active_lbl)
+        if active_count == 0:
+            self.empty_active_lbl.show()
+            self.lbl_status.setText("⚡  Status: Idle (No active downloads)")
+        else:
+            self.lbl_status.setText(f"⚡  Status: {active_count} Active Download(s)")
 
     def _clear_history(self) -> None:
-        from src.config.settings import SettingsManager
         SettingsManager.set("download_history", [])
+        SettingsManager.save()
         self._load_history()
 
     @staticmethod
     def _record_history(app_id: int, title: str, status: str, size: str = "") -> None:
-        from src.config.settings import SettingsManager
-        from datetime import datetime
         history = SettingsManager.get("download_history", []) or []
         history.append({
             "app_id": app_id,
             "title": title,
-            "size": size,
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "status": status,
+            "size": size
         })
         SettingsManager.set("download_history", history)
+        SettingsManager.save()
 
     def start_download(self, app_id: int, title: str) -> None:
-        """Starts a download process for a specific game."""
         loop = get_async_loop()
         loop.create_task(self._async_start_download(app_id, title))
 
@@ -136,27 +185,24 @@ class DownloadsWidget(QWidget):
         try:
             from src.services.download import DownloadManager
             download_method = SettingsManager.get("download_method", "steam")
-            
+
             try:
-                # Prepare Accela-style game data (LUA keys + manifests + installdir).
                 game_data = await DownloadManager.prepare_game_data(app_id, scope="full")
                 depots = game_data.get("depots", {})
 
                 if download_method == "ddmod":
-                    # --- Erken DDMod yolu kontrolü ---
                     from pathlib import Path
                     ddmod_path_str = SettingsManager.get("depotdownloadermod_path", "")
                     if not ddmod_path_str or not Path(ddmod_path_str).exists():
                         from PySide6.QtWidgets import QMessageBox
                         QMessageBox.critical(
                             self,
-                            "DDMod Kurulu Değil",
-                            "DepotDownloaderMod yolu bulunamadı.\n\n"
-                            "Lütfen Settings → Advanced Tools bölümüne gidip DDMod'u kurun."
+                            "DDMod Not Installed",
+                            "DepotDownloaderMod was not found.\n\n"
+                            "Please go to Settings → Advanced Tools to install DDMod."
                         )
                         return
 
-                    # Pause and ask for user selection using MetadataFetcher
                     from src.services.metadata import MetadataFetcher
                     from src.ui.depot_selection_dialog import DepotSelectionDialog
                     import asyncio
@@ -180,15 +226,12 @@ class DownloadsWidget(QWidget):
                     dialog.open()
 
                     selected_depot_ids = await future
-                    apply_patch = dialog.wants_patch()
                     dialog.deleteLater()
 
                     if selected_depot_ids is None:
-                        print(f"User canceled installation for {app_id}")
+                        print(f"User canceled download for {app_id}")
                         return
 
-                    # Seçili depot'lar geçerli: depot key'leri yeterli,
-                    # manifest ID'si yoksa DDMod güncel manifesti kendisi çeker.
                     selected_depots = {
                         d_id: d for d_id, d in depots.items()
                         if d_id in selected_depot_ids
@@ -196,30 +239,27 @@ class DownloadsWidget(QWidget):
                     if not selected_depots:
                         from PySide6.QtWidgets import QMessageBox
                         QMessageBox.warning(
-                            self, "İndirme Hatası",
-                            f"{title} için geçerli depot verisi bulunamadı.\n"
-                            "Hubcap bu oyun için indirme bilgisi sunmuyor olabilir."
+                            self, "Download Error",
+                            f"No valid depot metadata found for {title}."
                         )
                         return
 
-                    valid_depots = selected_depots
-
-                    game_data["depots"] = valid_depots
+                    game_data["depots"] = selected_depots
                     game_data["manifests"] = {
                         d_id: d.get("manifest_id")
-                        for d_id, d in valid_depots.items()
+                        for d_id, d in selected_depots.items()
                         if d.get("manifest_id")
                     }
 
-                    game_data["apply_patch"] = apply_patch
                     from src.services.download_task import DownloadTask
 
                     task = DownloadTask(game_data, title)
                     dl_widget = ActiveDownloadWidget(task)
                     dl_widget.closed.connect(lambda w=dl_widget: self._remove_active_widget(w))
 
+                    self.empty_active_lbl.hide()
                     self.active_downloads_layout.addWidget(dl_widget)
-                    self.active_scroll.show()
+                    self.lbl_status.setText(f"⚡  Status: Downloading {title}...")
 
                     has_error = False
 
@@ -232,7 +272,6 @@ class DownloadsWidget(QWidget):
                         dl_widget.mark_error(err_msg)
                         self._record_history(app_id, title, "Failed")
                         self._load_history()
-                        print(f"DDMod Error for {app_id}: {err_msg}")
 
                     def complete_cb():
                         if not task.is_canceled and not has_error:
@@ -240,24 +279,21 @@ class DownloadsWidget(QWidget):
                             self._record_history(app_id, title, "Completed")
                             self._load_history()
 
-                            # --- OTO-GOLDBERG ---
-                            # Oyun kurulur kurulmaz offline oynanabilmesi icin (kullanici iptal etse bile)
+                            # Auto-Goldberg Execution
                             try:
                                 from src.services.drm_manager import DRMManager
                                 DRMManager.apply_goldberg(str(app_id), task.download_dir)
-                                print(f"Auto-applied Goldberg for {title} so it runs out-of-the-box.")
+                                print(f"Auto-applied Goldberg for {title} out-of-the-box.")
                             except Exception as e:
                                 print(f"Failed to auto-apply Goldberg: {e}")
-
 
                     await task.run(progress_callback=progress_cb, error_callback=error_cb, complete_callback=complete_cb)
 
                     if task.is_canceled:
                         self._record_history(app_id, title, "Canceled")
                         self._load_history()
-                        print(f"Task for {app_id} was canceled.")
                 else:
-                    # Fallback to Steam protocol
+                    # Steam protocol
                     DownloadManager.install_via_steam(app_id)
 
             except Exception as e:

@@ -1,6 +1,7 @@
 from pathlib import Path
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                               QScrollArea, QPushButton, QLineEdit, QComboBox)
+                               QScrollArea, QPushButton, QLineEdit, QComboBox,
+                               QFrame, QSizePolicy)
 from PySide6.QtCore import Qt, Signal
 from src.config.slssteam import SLSsteamConfigManager
 from src.ui.game_card import GameCard
@@ -8,105 +9,183 @@ from src.api.hubcap import hubcap_api
 from src.ui.flow_layout import FlowLayout
 from src.utils.async_utils import get_async_loop
 
+
 class LibraryWidget(QWidget):
+    """
+    Redesigned My Library view featuring stat cards, instant filter/search,
+    responsive card flow, and quick management tools.
+    """
     download_requested = Signal(int, str)
     restart_steam_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
         self._load_generation = 0
+        self._all_cards = []
         self.init_ui()
 
     def init_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setContentsMargins(28, 28, 28, 28)
         layout.setSpacing(20)
 
-        # --- Header & Stats ---
+        # =====================================================================
+        # HEADER & STATS BANNER
+        # =====================================================================
         header_layout = QHBoxLayout()
+        
+        title_box = QVBoxLayout()
+        title_box.setSpacing(3)
         header = QLabel("My Library")
         header.setProperty("cssClass", "HeaderTitle")
-        self.lbl_stats = QLabel("0 Lua, 0 Steam, 0 GB Size")
-        self.lbl_stats.setProperty("cssClass", "GameSubtitle")
-        self.lbl_stats.setStyleSheet("margin-left: 20px;") # keep just the margin if needed, or rely on layout
-        header_layout.addWidget(header)
-        header_layout.addWidget(self.lbl_stats)
-        header_layout.addStretch()
-        layout.addLayout(header_layout)
+        sub = QLabel("Manage your installed games, apply fixes, and configure plugins")
+        sub.setProperty("cssClass", "SubHeader")
+        title_box.addWidget(header)
+        title_box.addWidget(sub)
 
-        # --- Action Toolbar ---
-        action_bar = QHBoxLayout()
-        self.btn_refresh = QPushButton("Refresh")
+        header_layout.addLayout(title_box)
+        header_layout.addStretch()
+
+        # Top Action Buttons
+        self.btn_refresh = QPushButton("🔄  Refresh")
         self.btn_refresh.setProperty("cssClass", "SecondaryAction")
         self.btn_refresh.clicked.connect(self.load_library)
-        self.btn_refresh_cache = QPushButton("Refresh Cache")
-        self.btn_refresh_cache.setProperty("cssClass", "SecondaryAction")
-        self.btn_refresh_cache.clicked.connect(self._refresh_cache)
-        self.btn_toggle_updates = QPushButton("Toggle Updates")
+
+        self.btn_export = QPushButton("📤  Export Luas")
+        self.btn_export.setProperty("cssClass", "SecondaryAction")
+        self.btn_export.clicked.connect(self._export_luas)
+
+        self.btn_cache = QPushButton("🧹  Clear Cache")
+        self.btn_cache.setProperty("cssClass", "SecondaryAction")
+        self.btn_cache.clicked.connect(self._refresh_cache)
+
+        header_layout.addWidget(self.btn_refresh)
+        header_layout.addWidget(self.btn_export)
+        header_layout.addWidget(self.btn_cache)
+
+        layout.addLayout(header_layout)
+
+        # =====================================================================
+        # 3 STAT CARDS BANNER
+        # =====================================================================
+        stats_layout = QHBoxLayout()
+        stats_layout.setSpacing(16)
+
+        self.card_games = self._create_stat_card("🎮  TOTAL GAMES", "0 Games", "Installed on disk & library")
+        self.card_luas = self._create_stat_card("⚡  LUA PLUGINS", "0 Active", "SLSsteam plugins enabled")
+        self.card_size = self._create_stat_card("💾  TOTAL STORAGE", "0.00 GB", "Estimated storage used")
+
+        stats_layout.addWidget(self.card_games)
+        stats_layout.addWidget(self.card_luas)
+        stats_layout.addWidget(self.card_size)
+
+        layout.addLayout(stats_layout)
+
+        # =====================================================================
+        # SEARCH & FILTER TOOLBAR
+        # =====================================================================
+        filters_bar = QHBoxLayout()
+        filters_bar.setSpacing(12)
+
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("🔍  Search games in library...")
+        self.search_input.setFixedWidth(280)
+        self.search_input.textChanged.connect(self._filter_cards)
+
+        self.combo_category = QComboBox()
+        self.combo_category.addItems(["All Items", "Installed Only", "Lua Config Only"])
+        self.combo_category.currentIndexChanged.connect(self._filter_cards)
+
+        self.combo_sort = QComboBox()
+        self.combo_sort.addItems(["Sort: Name (A-Z)", "Sort: App ID"])
+
+        self.btn_toggle_updates = QPushButton("Updates: ON")
         self.btn_toggle_updates.setProperty("cssClass", "SecondaryAction")
         self.btn_toggle_updates.clicked.connect(self._toggle_updates)
-        self.btn_export_luas = QPushButton("Export Luas")
-        self.btn_export_luas.setProperty("cssClass", "SecondaryAction")
-        self.btn_export_luas.clicked.connect(self._export_luas)
-        self.btn_restart_steam = QPushButton("Restart Steam")
-        self.btn_restart_steam.setProperty("cssClass", "PrimaryAction")
-        self.btn_restart_steam.clicked.connect(self.restart_steam_requested.emit)
-
-        action_bar.addWidget(self.btn_refresh)
-        action_bar.addWidget(self.btn_refresh_cache)
-        action_bar.addWidget(self.btn_toggle_updates)
-        action_bar.addWidget(self.btn_export_luas)
-        action_bar.addWidget(self.btn_restart_steam)
-        action_bar.addStretch()
-        layout.addLayout(action_bar)
-
-        # --- Filters Toolbar ---
-        filters_bar = QHBoxLayout()
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search in library...")
-        self.search_input.setFixedWidth(250)
-        
-        self.combo_category = QComboBox()
-        self.combo_category.addItems(["All", "Games", "DLC"])
-        
-        self.combo_sort = QComboBox()
-        self.combo_sort.addItems(["Sort: Name", "Sort: Size", "Sort: Recent"])
-
-        self.btn_list_view = QPushButton("List View")
-        self.btn_list_view.setProperty("cssClass", "SecondaryAction")
-        self.btn_select_mode = QPushButton("Select Mode")
-        self.btn_select_mode.setProperty("cssClass", "SecondaryAction")
 
         filters_bar.addWidget(self.search_input)
         filters_bar.addWidget(self.combo_category)
         filters_bar.addWidget(self.combo_sort)
         filters_bar.addStretch()
-        filters_bar.addWidget(self.btn_select_mode)
-        filters_bar.addWidget(self.btn_list_view)
+        filters_bar.addWidget(self.btn_toggle_updates)
+
         layout.addLayout(filters_bar)
 
-        # Grid Area
+        # =====================================================================
+        # GAME GRID AREA
+        # =====================================================================
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setObjectName("LibraryScroll")
 
         self.grid_container = QWidget()
-
         self.grid_layout = FlowLayout(self.grid_container, spacing=20)
 
-        # Empty state label
-        self.empty_label = QLabel("Your library is empty. Go to Search to add games.")
-        self.empty_label.setProperty("cssClass", "GameSubtitle")
-        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.grid_layout.addWidget(self.empty_label)
+        # Empty state widget
+        self.empty_widget = QFrame()
+        self.empty_widget.setObjectName("SurfaceCard")
+        empty_layout = QVBoxLayout(self.empty_widget)
+        empty_layout.setContentsMargins(40, 40, 40, 40)
+        empty_layout.setSpacing(12)
+
+        empty_icon = QLabel("🎮")
+        empty_icon.setStyleSheet("font-size: 40px;")
+        empty_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.empty_title = QLabel("Your Library is Empty")
+        self.empty_title.setStyleSheet("font-size: 18px; font-weight: 800; color: #FFFFFF;")
+        self.empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.empty_sub = QLabel("Explore the Store to download games or add manifest Lua files.")
+        self.empty_sub.setProperty("cssClass", "SubHeader")
+        self.empty_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        empty_layout.addWidget(empty_icon)
+        empty_layout.addWidget(self.empty_title)
+        empty_layout.addWidget(self.empty_sub)
+
+        self.grid_layout.addWidget(self.empty_widget)
 
         self.scroll_area.setWidget(self.grid_container)
         layout.addWidget(self.scroll_area)
 
+        # Load initial library state
+        self.load_library()
+
+    def _create_stat_card(self, title: str, main_val: str, desc: str) -> QFrame:
+        card = QFrame()
+        card.setObjectName("StatCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(16, 14, 16, 14)
+        card_layout.setSpacing(4)
+
+        lbl_title = QLabel(title)
+        lbl_title.setStyleSheet("color: #818CF8; font-size: 11px; font-weight: 800; letter-spacing: 1px;")
+
+        lbl_val = QLabel(main_val)
+        lbl_val.setStyleSheet("color: #FFFFFF; font-size: 20px; font-weight: 800;")
+
+        lbl_desc = QLabel(desc)
+        lbl_desc.setStyleSheet("color: #64748B; font-size: 11px; font-weight: 500;")
+
+        card_layout.addWidget(lbl_title)
+        card_layout.addWidget(lbl_val)
+        card_layout.addWidget(lbl_desc)
+
+        # Store value and desc labels for live updates
+        card._val_label = lbl_val
+        card._desc_label = lbl_desc
+        return card
+
     def _clear_grid(self) -> None:
+        self._all_cards.clear()
         for i in reversed(range(self.grid_layout.count())):
             item = self.grid_layout.itemAt(i)
-            if item.widget() and item.widget() != self.empty_label:
+            if item.widget() and item.widget() != self.empty_widget:
                 item.widget().deleteLater()
+
+    def refresh_library(self) -> None:
+        self.load_library()
 
     def _refresh_cache(self) -> None:
         hubcap_api.clear_cache()
@@ -159,25 +238,15 @@ class LibraryWidget(QWidget):
             app_ids = config_app_ids | set(installed.keys())
 
             if not app_ids:
-                self.empty_label.show()
-                self.lbl_stats.setText("0 Lua, 0 Steam, 0 GB Size")
+                self.empty_widget.show()
+                self.card_games._val_label.setText("0 Games")
+                self.card_luas._val_label.setText("0 Active")
+                self.card_size._val_label.setText("0.00 GB")
                 return
 
-            self.empty_label.hide()
-
-            # Real stats: count Lua files on disk and compute their total size
-            from src.utils.paths import get_steam_path
-            steam_path = get_steam_path()
-            lua_count = 0
-            lua_size = 0
-            if steam_path:
-                plugin_dir = steam_path / "config" / "stplug-in"
-                if plugin_dir.exists():
-                    lua_files = list(plugin_dir.glob("*.lua"))
-                    lua_count = len(lua_files)
-                    lua_size = sum(f.stat().st_size for f in lua_files if f.is_file())
-            size_gb = lua_size / (1024 ** 3)
-            self.lbl_stats.setText(f"{lua_count} Lua, {len(app_ids)} Steam, {size_gb:.2f} GB Size")
+            self.empty_widget.hide()
+            # Real stats calculation
+            self._update_storage_stats(installed)
 
             # Fetch game details asynchronously
             loop = get_async_loop()
@@ -185,41 +254,106 @@ class LibraryWidget(QWidget):
             loop.create_task(self._fetch_and_display_library(app_ids, installed))
 
         except Exception as e:
-            self.empty_label.setText(f"Error loading library: {e}")
-            self.empty_label.show()
+            self.empty_title.setText("Error Loading Library")
+            self.empty_sub.setText(str(e))
+            self.empty_widget.show()
 
+    def _update_storage_stats(self, installed: dict) -> None:
+        from pathlib import Path
+        import os
+        from src.ui.game_card import get_installed_game_path
+
+        def _get_folder_size(path: Path) -> int:
+            total = 0
+            try:
+                for entry in os.scandir(path):
+                    if entry.is_file(follow_symlinks=False):
+                        total += entry.stat().st_size
+                    elif entry.is_dir(follow_symlinks=False):
+                        total += _get_folder_size(Path(entry.path))
+            except Exception:
+                pass
+            return total
+
+        installed_bytes = 0
+        installed_count = 0
+        for app_id in installed.keys():
+            p = get_installed_game_path(app_id)
+            if p and Path(p).exists():
+                installed_count += 1
+                installed_bytes += _get_folder_size(Path(p))
+
+        size_gb = installed_bytes / (1024 ** 3)
+        self.card_size._val_label.setText(f"{size_gb:.2f} GB")
+        self.card_size._desc_label.setText(f"{installed_count} Games Installed on Disk")
+        self.card_luas._val_label.setText(f"{installed_count} Active")
     async def _fetch_and_display_library(self, app_ids: set, installed_names: dict) -> None:
         import httpx
 
         generation = self._load_generation
-
+        total_valid_games = 0
         async with httpx.AsyncClient() as client:
             for app_id in sorted(app_ids):
                 if generation != self._load_generation:
                     return
-                title = installed_names.get(app_id) or f"App {app_id}"
+                
+                title = installed_names.get(app_id)
                 image_url = ""
-                if app_id not in installed_names:
-                    # Only SLSsteam-config games lack an on-disk manifest: ask Steam for a name.
-                    try:
-                        steam_url = f"https://store.steampowered.com/api/appdetails?appids={app_id}"
-                        response = await client.get(steam_url, timeout=5.0)
-                        if response.status_code == 200:
-                            app_data = response.json().get(str(app_id), {})
-                            if app_data.get("success"):
-                                title = app_data.get("data", {}).get("name", title)
-                    except Exception as e:
-                        print(f"Error fetching name for {app_id}: {e}")
+                is_dlc = False
+
+                # Query Steam appdetails to get name and verify app type
+                try:
+                    steam_url = f"https://store.steampowered.com/api/appdetails?appids={app_id}"
+                    response = await client.get(steam_url, timeout=5.0)
+                    if response.status_code == 200:
+                        app_data = response.json().get(str(app_id), {})
+                        if app_data.get("success"):
+                            data = app_data.get("data", {})
+                            app_type = data.get("type", "game")
+                            if app_type in ("dlc", "music", "demo", "advertising"):
+                                is_dlc = True
+                            if not title:
+                                title = data.get("name", f"App {app_id}")
+                except Exception as e:
+                    print(f"Error fetching metadata for {app_id}: {e}")
+
+                # Skip DLCs from being displayed as standalone game cards in the library
+                if is_dlc:
+                    continue
+
+                if not title:
+                    title = f"App {app_id}"
 
                 if generation != self._load_generation:
                     return
 
+                total_valid_games += 1
+                self.card_games._val_label.setText(f"{total_valid_games} Games")
+
                 card = GameCard(app_id, title, image_url, mode="library")
                 card.download_requested.connect(self.download_requested.emit)
                 card.uninstalled.connect(lambda _app_id: self.load_library())
-                card.image_load_failed.connect(self._push_card_to_end)
+                
+                self._all_cards.append(card)
                 self.grid_layout.addWidget(card)
 
-    def _push_card_to_end(self, card) -> None:
-        self.grid_layout.removeWidget(card)
-        self.grid_layout.addWidget(card)
+        if total_valid_games == 0 and not installed_names:
+            self.empty_widget.show()
+            self.card_games._val_label.setText("0 Games")
+    def _filter_cards(self) -> None:
+        query = self.search_input.text().lower().strip()
+        cat = self.combo_category.currentText()
+
+        for card in self._all_cards:
+            match_query = (not query) or (query in card.title.lower()) or (query in str(card.app_id))
+            
+            match_cat = True
+            if cat == "Installed Only":
+                match_cat = bool(getattr(card, '_installed_path', None))
+            elif cat == "Lua Config Only":
+                match_cat = not bool(getattr(card, '_installed_path', None))
+
+            if match_query and match_cat:
+                card.show()
+            else:
+                card.hide()

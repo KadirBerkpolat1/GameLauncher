@@ -6,8 +6,8 @@ class FixPickDialog(QDialog):
     def __init__(self, fixes: list, parent=None):
         super().__init__(parent)
         self.fixes = fixes
-        self.setWindowTitle("Yama Kaynağı Seçimi")
-        self.resize(500, 250)
+        self.setWindowTitle("Select Patch Source")
+        self.resize(520, 260)
         self.setStyleSheet("""
             QDialog {
                 background-color: #161B22;
@@ -53,7 +53,8 @@ class FixPickDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        lbl = QLabel("Kurulacak Yama (Fix) Versiyonunu Seçin:")
+        lbl = QLabel("Select Patch Version to Install:")
+        lbl.setStyleSheet("color: #FFFFFF; font-weight: 700; font-size: 14px;")
         layout.addWidget(lbl)
 
         self.list_widget = QListWidget()
@@ -64,15 +65,15 @@ class FixPickDialog(QDialog):
                 source = "Online-Fix"
             else:
                 source = "Goldberg"
-            ver = fix.get("version", "Bilinmiyor")
+            ver = fix.get("version", "Unknown")
             if ver == "0.0.0":
-                ver = "Bilinmiyor"
+                ver = "Unknown"
             title = fix.get("title", "")
             
-            # İlk öğe (en güncel olan) "Önerilen" olarak işaretlensin
-            rec_text = " (Önerilen)" if i == 0 else ""
+            # Mark the highest version as Recommended
+            rec_text = " (Recommended)" if i == 0 else ""
             
-            item_text = f"[{source}] Versiyon: {ver}{rec_text}\n{title}"
+            item_text = f"[{source}] Version: {ver}{rec_text}\n{title}"
             item = QListWidgetItem(item_text)
             # Seçimi tutmak için index kaydedelim
             item.setData(Qt.ItemDataRole.UserRole, fix)
@@ -83,13 +84,13 @@ class FixPickDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        self.btn_select = QPushButton("Seç ve Kur")
+        self.btn_select = QPushButton("Install Selected")
         self.btn_select.setEnabled(False)
         self.btn_select.clicked.connect(self.accept)
         
         self.list_widget.itemSelectionChanged.connect(self._on_selection_changed)
 
-        btn_cancel = QPushButton("İptal")
+        btn_cancel = QPushButton("Cancel")
         btn_cancel.setStyleSheet("background-color: #21262D; color: #C9D1D9; border: 1px solid #30363D;")
         btn_cancel.clicked.connect(self.reject)
 

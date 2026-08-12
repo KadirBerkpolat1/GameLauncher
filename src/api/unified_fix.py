@@ -28,7 +28,7 @@ class UnifiedFixFetcher:
         # Oyun isminin sonundaki ".53" gibi eklentileri temizle (PEAK.53 -> PEAK)
         search_query = re.sub(r'\.\d+$', '', game_name).strip()
         
-        of_task = onlinefix_api.search_game(search_query, limit=1)
+        of_task = onlinefix_api.search_game(search_query, limit=10)
         ft_task = freetp_api.search_game(search_query)
 
 
@@ -62,7 +62,7 @@ class UnifiedFixFetcher:
             clean_name = re.sub(r'[^a-zA-Z\s]', '', search_query).strip()
             if clean_name and clean_name != search_query:
                 # OnlineFix flood control e takilabilir, ama FreeTP takilmaz.
-                of_task2 = onlinefix_api.search_game(clean_name, limit=1)
+                of_task2 = onlinefix_api.search_game(clean_name, limit=10)
                 ft_task2 = freetp_api.search_game(clean_name)
                 of_res2, ft_res2 = await asyncio.gather(of_task2, ft_task2, return_exceptions=True)
                 await _process_results(of_res2, ft_res2)

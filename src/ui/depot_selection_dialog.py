@@ -87,7 +87,7 @@ class DepotSelectionDialog(QDialog):
 
         # --- DLCs ---
         if self.metadata["dlcs"]:
-            dlc_group = QGroupBox(f"İndirilebilir İçerikler (DLC)  —  {len(self.metadata['dlcs'])} adet")
+            dlc_group = QGroupBox(f"Downloadable Content (DLC)  —  {len(self.metadata['dlcs'])} items")
             dlc_group.setStyleSheet("QGroupBox { font-weight: bold; color: #E6EDF3; border: 1px solid #30363D; border-radius: 6px; margin-top: 8px; padding: 8px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; }")
             dlc_layout = QVBoxLayout(dlc_group)
 
@@ -144,7 +144,7 @@ class DepotSelectionDialog(QDialog):
             dlc_layout.addWidget(scroll)
             layout.addWidget(dlc_group)
         else:
-            no_dlc = QLabel("Bu oyun için DLC bulunamadı.")
+            no_dlc = QLabel("No DLCs found for this game.")
             no_dlc.setStyleSheet("color: #8B949E; padding: 8px;")
             layout.addWidget(no_dlc)
 
@@ -153,11 +153,11 @@ class DepotSelectionDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        cancel_btn = QPushButton("İptal")
+        cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
         cancel_btn.setStyleSheet("padding: 8px 16px; border-radius: 6px;")
 
-        confirm_btn = QPushButton("İndir")
+        confirm_btn = QPushButton("Download")
         confirm_btn.clicked.connect(self.accept)
         confirm_btn.setStyleSheet(
             "background-color: #1F6FEB; color: white; font-weight: bold;"

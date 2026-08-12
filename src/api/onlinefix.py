@@ -68,13 +68,30 @@ def _normalize(s: str) -> str:
     return re.sub(r"[\W_]+", "", s.lower())
 
 
+def _score_title_match(query: str, title: str) -> int:
+    """Calculates relevance score. Exact title match yields highest score."""
+    clean_q = re.sub(r"[\W_]+", "", query.lower())
+    clean_t = re.sub(r"[\W_]+", "", html.unescape(title).lower())
+
+    for suffix in [
+        "игратьпосетииинтернетуонлайн",
+        "игратьпосетибесплатноонлайн",
+        "игратьпосети",
+        "посетииинтернетуонлайн",
+        "посети",
+        "online"
+    ]:
+        clean_t = clean_t.replace(suffix, "")
+
+    if clean_t == clean_q:
+        return 1000  # Exact match!
+    if clean_t.startswith(clean_q):
+        return 500 - len(clean_t)
+    if clean_q in clean_t:
+        return 100 - len(clean_t)
+    return 0
+
 def _search_match(query: str, url: str, title: str) -> bool:
-    """
-    Sorgu kelimelerinin tamaminin slug veya baslik kelimelerinde gecip
-    gecmedigini kontrol eder. Boylece DLE'nin alakasiz sonuclari ("R.E.P.O."
-    icin "report" iceren oyunlar gibi) elenir, cok kelimeli oyun adlari
-    ("Hollow Knight") ise bulunur.
-    """
     q_words = [_normalize(w) for w in query.split()]
     q_words = [w for w in q_words if w]
     if not q_words:
@@ -82,7 +99,6 @@ def _search_match(query: str, url: str, title: str) -> bool:
     slug_words = {_normalize(w) for w in url.rsplit("/", 1)[-1].replace(".html", "").split("-")}
     title_words = {_normalize(w) for w in re.split(r"[\W_]+", html.unescape(title))}
     return all(w in slug_words or w in title_words for w in q_words)
-
 
 class OnlineFixError(Exception):
     """Base exception for Online-Fix.Me errors."""
@@ -165,6 +181,7 @@ class OnlineFixClient:
             items = self._parse_search_items(resp.text)
             items = [it for it in items if _search_match(query, it["url"], it["title"])]
             if items:
+                items.sort(key=lambda it: _score_title_match(query, it["title"]), reverse=True)
                 break
         return items[:limit]
 
