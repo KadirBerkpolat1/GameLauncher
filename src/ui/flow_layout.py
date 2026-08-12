@@ -1,10 +1,11 @@
 from PySide6.QtWidgets import QLayout, QSizePolicy
 from PySide6.QtCore import Qt, QRect, QSize, QPoint
 
+
 class FlowLayout(QLayout):
     """
-    A custom layout that wraps its widgets to the next line when there is no horizontal space left.
-    Acts like CSS flex-wrap: wrap.
+    A robust custom layout that wraps its child widgets to the next line 
+    when horizontal space is exhausted, acting like CSS flex-wrap: wrap.
     """
     def __init__(self, parent=None, margin=0, spacing=20):
         super().__init__(parent)
@@ -55,34 +56,36 @@ class FlowLayout(QLayout):
         size = QSize()
         for item in self.itemList:
             size = size.expandedTo(item.minimumSize())
-        # Add margins to the minimum size
         left, top, right, bottom = self.getContentsMargins()
         size += QSize(left + right, top + bottom)
         return size
 
     def doLayout(self, rect, testOnly):
-        x = rect.x()
-        y = rect.y()
+        left, top, right, bottom = self.getContentsMargins()
+        effective_rect = rect.adjusted(left, top, -right, -bottom)
+        x = effective_rect.x()
+        y = effective_rect.y()
         lineHeight = 0
         spacing = self.spacing()
 
         for item in self.itemList:
             wid = item.widget()
-            spaceX = spacing
-            spaceY = spacing
-            nextX = x + item.sizeHint().width() + spaceX
+            if wid and not wid.isVisible():
+                continue
+
+            item_w = item.sizeHint().width()
+            item_h = item.sizeHint().height()
 
             # If adding this widget exceeds the container width, wrap to next line
-            if nextX - spaceX > rect.right() and lineHeight > 0:
-                x = rect.x()
-                y = y + lineHeight + spaceY
-                nextX = x + item.sizeHint().width() + spaceX
+            if x + item_w > effective_rect.right() and lineHeight > 0:
+                x = effective_rect.x()
+                y = y + lineHeight + spacing
                 lineHeight = 0
 
             if not testOnly:
-                item.setGeometry(QRect(QPoint(x, y), item.sizeHint()))
+                item.setGeometry(QRect(QPoint(x, y), QSize(item_w, item_h)))
 
-            x = nextX
-            lineHeight = max(lineHeight, item.sizeHint().height())
+            x = x + item_w + spacing
+            lineHeight = max(lineHeight, item_h)
 
-        return y + lineHeight - rect.y()
+        return y + lineHeight - rect.y() + bottom

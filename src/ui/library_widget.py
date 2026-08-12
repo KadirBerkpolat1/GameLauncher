@@ -117,7 +117,7 @@ class LibraryWidget(QWidget):
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setObjectName("LibraryScroll")
-
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.grid_container = QWidget()
         self.grid_layout = FlowLayout(self.grid_container, spacing=20)
 

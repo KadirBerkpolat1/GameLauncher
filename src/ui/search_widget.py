@@ -135,7 +135,7 @@ class SearchWidget(QWidget):
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setObjectName("StoreScroll")
-
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.results_container = QWidget()
         self.results_layout = FlowLayout(self.results_container, spacing=20)
 
