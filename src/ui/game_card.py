@@ -180,7 +180,7 @@ class GameCard(QFrame):
     async def _resolve_and_fetch_sgdb(self, api_key: str) -> None:
         try:
             import httpx
-            url = f"https://www.steamgriddb.com/api/v2/grids/game/{self.app_id}?dimensions=600x900"
+            url = f"https://www.steamgriddb.com/api/v2/grids/steam/{self.app_id}?dimensions=600x900&types=static"
             headers = {"Authorization": f"Bearer {api_key}"}
             async with httpx.AsyncClient(follow_redirects=True) as client:
                 resp = await client.get(url, headers=headers, timeout=5.0)
@@ -188,9 +188,10 @@ class GameCard(QFrame):
                     data = resp.json()
                     if data.get("success") and data.get("data"):
                         grids = sorted(data["data"], key=lambda g: g.get("score", 0), reverse=True)
-                        self.image_urls.insert(0, grids[0]["url"])
+                        if grids and grids[0].get("url"):
+                            self.image_urls.insert(0, grids[0]["url"])
         except Exception as e:
-            print(f"SteamGridDB error for {self.app_id}: {e}")
+            pass
 
         self._start_network_fetch(0)
 
