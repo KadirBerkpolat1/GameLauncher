@@ -24,28 +24,48 @@ class UnifiedFixFetcher:
         Searches both Online-Fix and FreeTP for the game.
         Returns a list of dictionaries with keys: 'source', 'title', 'version', 'url'.
         """
-        of_task = onlinefix_api.search_game(game_name, limit=1)
-        ft_task = freetp_api.search_game(game_name)
+        import re
+        # Oyun isminin sonundaki ".53" gibi eklentileri temizle (PEAK.53 -> PEAK)
+        search_query = re.sub(r'\.\d+$', '', game_name).strip()
+        
+        of_task = onlinefix_api.search_game(search_query, limit=1)
+        ft_task = freetp_api.search_game(search_query)
+
 
         of_results, ft_result = await asyncio.gather(of_task, ft_task, return_exceptions=True)
 
         fixes = []
 
-        if not isinstance(of_results, Exception) and of_results:
-            of_best = of_results[0]
-            # Fetch the actual game page to get the correct version (OnlineFix hides it in the page body)
-            try:
-                page_info = await onlinefix_api.get_game_page(of_best["url"])
-                of_best["version"] = page_info.get("version", of_best.get("version", "0.0.0"))
-            except Exception:
-                pass
-            of_best["source"] = "onlinefix"
-            fixes.append(of_best)
-            
-        if not isinstance(ft_result, Exception) and ft_result:
-            ft_best = ft_result
-            ft_best["source"] = "freetp"
-            fixes.append(ft_best)
+        async def _process_results(of_res, ft_res):
+            if not isinstance(of_res, Exception) and of_res:
+                of_best = of_res[0]
+                try:
+                    page_info = await onlinefix_api.get_game_page(of_best["url"])
+                    of_best["version"] = page_info.get("version", of_best.get("version", "0.0.0"))
+                except Exception:
+                    pass
+                of_best["source"] = "onlinefix"
+                fixes.append(of_best)
+                
+            if not isinstance(ft_res, Exception) and ft_res:
+                ft_best = ft_res
+                ft_best["source"] = "freetp"
+                fixes.append(ft_best)
+
+        await _process_results(of_results, ft_result)
+        
+        # Eğer iki siteden de hicbir sonuc donmediyse ismin icindeki noktalama/rakamlari 
+        # silip (ornegin PEAK.53 -> PEAK) tekrar kaba bir arama yapalim.
+        # Eger yama bulunamadiysa ve isimde hala rakam vb varsa, genisletilmis arama yapabiliriz.
+        # Ancak flood control (15sn) yuzunden pes pese arama yaparsak OnlineFix bos doner.
+        if not fixes:
+            clean_name = re.sub(r'[^a-zA-Z\s]', '', search_query).strip()
+            if clean_name and clean_name != search_query:
+                # OnlineFix flood control e takilabilir, ama FreeTP takilmaz.
+                of_task2 = onlinefix_api.search_game(clean_name, limit=1)
+                ft_task2 = freetp_api.search_game(clean_name)
+                of_res2, ft_res2 = await asyncio.gather(of_task2, ft_task2, return_exceptions=True)
+                await _process_results(of_res2, ft_res2)
 
         # Sort fixes so the highest version comes first
         def get_ver_tuple(fix):
