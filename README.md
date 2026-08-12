@@ -33,8 +33,8 @@ shortcut. Re-running it upgrades an existing install.
 curl -fsSL https://cdn.jsdelivr.net/gh/KadirBerkpolat1/GameLauncher@main/install.sh | bash
 ```
 
-Prerequisites: **Python 3.11+**. `p7zip` is optional but recommended (SLSsteam
-install from the UI needs it) — the installer will offer to install it if missing.
+Prerequisites: **Python 3.11+**. `p7zip` and `innoextract` are optional but recommended
+(needed for SLSsteam and FreeTP patches) — the installer will offer to install them.
 
 ### Manual setup
 

@@ -152,7 +152,7 @@ class DepotSelectionDialog(QDialog):
         extra_group = QGroupBox("Ek Seçenekler")
         extra_group.setStyleSheet("QGroupBox { font-weight: bold; color: #E6EDF3; border: 1px solid #30363D; border-radius: 6px; margin-top: 8px; padding: 8px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; }")
         extra_layout = QVBoxLayout(extra_group)
-        self.onlinefix_checkbox = QCheckBox("OnlineFix Yamasını Uygula (Sadece Multiplayer Oyunlar İçin Seçin)")
+        self.onlinefix_checkbox = QCheckBox("Otomatik Yama Uygula (OnlineFix & FreeTP - Sadece MP Oyunlar)")
         self.onlinefix_checkbox.setStyleSheet(CHECKBOX_STYLE)
         self.onlinefix_checkbox.setChecked(False)
         extra_layout.addWidget(self.onlinefix_checkbox)

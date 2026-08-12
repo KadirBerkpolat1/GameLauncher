@@ -94,34 +94,53 @@ if ! python3 -m venv --help > /dev/null 2>&1; then
     exit 1
 fi
 
-# ── 3. Sistem bağımlılıkları (7z) ──
+
+# ── 3. Sistem bağımlılıkları (7z, innoextract) ──
 echo -e "${YELLOW}[3/7]${NC} Sistem bağımlılıkları kontrol ediliyor..."
-if command -v 7z &> /dev/null || command -v 7za &> /dev/null; then
-    echo -e "  ${GREEN}✓${NC} 7z mevcut"
+MISSING_PKGS_ARCH=""
+MISSING_PKGS_DEB=""
+MISSING_PKGS_DNF=""
+MISSING_NAMES=""
+
+if ! (command -v 7z &> /dev/null || command -v 7za &> /dev/null); then
+    MISSING_PKGS_ARCH+=" p7zip"
+    MISSING_PKGS_DEB+=" p7zip-full"
+    MISSING_PKGS_DNF+=" p7zip p7zip-plugins"
+    MISSING_NAMES+=" 7z"
+fi
+
+if ! command -v innoextract &> /dev/null; then
+    MISSING_PKGS_ARCH+=" innoextract"
+    MISSING_PKGS_DEB+=" innoextract"
+    MISSING_PKGS_DNF+=" innoextract"
+    MISSING_NAMES+=" innoextract"
+fi
+
+if [ -z "$MISSING_NAMES" ]; then
+    echo -e "  ${GREEN}✓${NC} 7z ve innoextract mevcut"
 else
-    echo -e "  ${YELLOW}  ! 7z (p7zip) bulunamadı. SLSsteam kurulumu onsuz çalışmaz.${NC}"
+    echo -e "  ${YELLOW}  ! Eksik bağımlılıklar:$MISSING_NAMES${NC}"
+    echo -e "  ${YELLOW}    Bu araçlar yama kurulumu (OnlineFix/FreeTP) için gereklidir.${NC}"
     if command -v sudo &> /dev/null && [ -z "${NONINTERACTIVE:-}" ]; then
-        ask "  p7zip otomatik kurulsun mu? [e/H]: "
+        ask "  Eksik paketler otomatik kurulsun mu? [e/H]: "
         if [[ "$REPLY" =~ ^[eEyY]$ ]]; then
             if command -v pacman &> /dev/null; then
-                sudo pacman -S --needed p7zip
+                sudo pacman -S --needed $MISSING_PKGS_ARCH
             elif command -v apt-get &> /dev/null; then
-                sudo apt-get update && sudo apt-get install -y p7zip-full
+                sudo apt-get update && sudo apt-get install -y $MISSING_PKGS_DEB
             elif command -v dnf &> /dev/null; then
-                sudo dnf install -y p7zip p7zip-plugins
+                sudo dnf install -y $MISSING_PKGS_DNF
             else
-                echo -e "${RED}    Dağıtım algılanamadı, elle kurun: 7z (p7zip)${NC}"
+                echo -e "${RED}    Dağıtım algılanamadı, elle kurun:$MISSING_NAMES${NC}"
             fi
-            if command -v 7z &> /dev/null || command -v 7za &> /dev/null; then
-                echo -e "  ${GREEN}✓${NC} p7zip kuruldu"
-            fi
+            echo -e "  ${GREEN}✓${NC} Kurulum denemesi tamamlandı"
         else
-            echo -e "  ${YELLOW}  ~ Atlandı. Launcher yine de çalışır, SLSsteam kurulumu ise eksik kalır.${NC}"
+            echo -e "  ${YELLOW}  ~ Atlandı. Launcher çalışır ancak yama çıkartma (extract) işlemleri başarısız olabilir.${NC}"
         fi
     else
-        echo "    Arch:   sudo pacman -S p7zip"
-        echo "    Debian: sudo apt install p7zip-full"
-        echo "    Fedora: sudo dnf install p7zip p7zip-plugins"
+        echo "    Arch:   sudo pacman -S$MISSING_PKGS_ARCH"
+        echo "    Debian: sudo apt install$MISSING_PKGS_DEB"
+        echo "    Fedora: sudo dnf install$MISSING_PKGS_DNF"
     fi
 fi
 
