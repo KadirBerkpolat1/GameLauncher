@@ -2,6 +2,7 @@
 FreeTP.org Scraper API for fetching game versions and multiplayer fixes.
 """
 import re
+import httpx
 import html as html_lib
 from typing import Optional, Dict, Tuple
 from pathlib import Path
@@ -60,11 +61,18 @@ class FreeTPClient:
                 # Check if the title actually matches the query
                 title_norm = self._normalize(title)
                 if query_norm in title_norm:
-                    version = self._extract_version(title)
+                    # Fetch the actual article page to get the version from its <title>
+                    page_resp = await self._client.get(url)
+                    page_html = page_resp.content.decode('cp1251', errors='replace')
+                    title_match = re.search(r'<title[^>]*>(.*?)</title>', page_html, re.IGNORECASE | re.DOTALL)
+                    if title_match:
+                        full_title = html_lib.unescape(title_match.group(1)).strip()
+                        version = self._extract_version(full_title)
+                    else:
+                        version = self._extract_version(title)
+                    
                     return {"url": url, "version": version, "title": title}
-            
             return None
-            
         except Exception as e:
             print(f"FreeTP search error: {e}")
             return None
