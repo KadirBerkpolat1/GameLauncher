@@ -354,24 +354,37 @@ class GameCard(QFrame):
             self.btn_apply_fix.setText("Yama aranıyor...")
             fixes = await UnifiedFixFetcher.get_available_fixes(self.title)
             
-            if not fixes:
-                raise OnlineFixNotFoundError("Oyun Online-Fix.me veya FreeTP'de bulunamadı.")
+            # Goldberg (Offline Crack) Secenegini ekle
+            fixes.append({
+                "source": "goldberg",
+                "title": "Steam Korumasını Kaldır (Sadece Tek Oyunculu / Çevrimdışı)",
+                "version": "Otom.",
+                "url": ""
+            })
                 
             # Ana thread'de (UI thread) dialog acmaliyiz.
             from src.ui.fix_pick_dialog import FixPickDialog
             dlg = FixPickDialog(fixes, self)
             if dlg.exec() != QDialog.DialogCode.Accepted:
+                self.btn_apply_fix.setText("Apply Fix")
+                self.btn_apply_fix.setEnabled(True)
                 return
                 
             best_fix = dlg.get_selected_fix()
             if not best_fix:
+                self.btn_apply_fix.setText("Apply Fix")
+                self.btn_apply_fix.setEnabled(True)
                 return
                 
             source = best_fix["source"]
 
             self.btn_apply_fix.setText(f"İndiriliyor ({source})...")
-            if source == "onlinefix":
-                # OnlineFix indirme adimlari
+            
+            if source == "goldberg":
+                from src.services.drm_manager import DRMManager
+                DRMManager.apply_goldberg(str(self.app_id), target_path)
+                used_online = True
+            elif source == "onlinefix":
                 game_url = best_fix["url"]
                 page = await onlinefix_api.get_game_page(game_url)
                 hoster_url = page.get("hoster_link")
