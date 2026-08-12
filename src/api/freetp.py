@@ -64,12 +64,28 @@ class FreeTPClient:
                     # Fetch the actual article page to get the version from its <title>
                     page_resp = await self._client.get(url)
                     page_html = page_resp.content.decode('cp1251', errors='replace')
+                    
+                    version = "0.0.0"
                     title_match = re.search(r'<title[^>]*>(.*?)</title>', page_html, re.IGNORECASE | re.DOTALL)
                     if title_match:
                         full_title = html_lib.unescape(title_match.group(1)).strip()
                         version = self._extract_version(full_title)
-                    else:
-                        version = self._extract_version(title)
+                    
+                    if version == "0.0.0":
+                        # Eger baslikta versiyon yoksa, html icinde arayalim
+                        # 1. Версия игры: 1.2.3
+                        v_match = re.search(r'Версия игры:[^<]*?(\d+[\.\d]*[a-zA-Z]*)', page_html, re.IGNORECASE)
+                        if not v_match:
+                            # 2. Torrent linklerinde v.568201
+                            v_match = re.search(r'v\.?(\d+(?:\.\d+)+)', page_html, re.IGNORECASE)
+                        if not v_match:
+                            # Torrent dosya isminde tek basina sayi (v.568201) 
+                            v_match = re.search(r'v\.?(\d+)', page_html, re.IGNORECASE)
+                            
+                        if v_match:
+                            version = v_match.group(1)
+                        else:
+                            version = self._extract_version(title)
                     
                     return {"url": url, "version": version, "title": title}
             return None

@@ -60,6 +60,8 @@ class FixPickDialog(QDialog):
         for i, fix in enumerate(self.fixes):
             source = "FreeTP" if fix["source"] == "freetp" else "Online-Fix"
             ver = fix.get("version", "Bilinmiyor")
+            if ver == "0.0.0":
+                ver = "Bilinmiyor"
             title = fix.get("title", "")
             
             # İlk öğe (en güncel olan) "Önerilen" olarak işaretlensin
