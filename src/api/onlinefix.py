@@ -203,9 +203,18 @@ class OnlineFixClient:
         if m:
             title = html.unescape(m.group(1)).strip()
 
+        # Try to find the version in the page text
+        version = "0.0.0"
+        ver_m = re.search(r'верси[яию]\s+(?:игры\s+)?(?:до\s+)?v?(\d+(?:\.\d+)*[a-zA-Z]*)', resp.text, re.IGNORECASE)
+        if ver_m:
+            version = ver_m.group(1)
+        else:
+            version = _extract_version(title)
+
         links = _HOSTER_LINK_RE.findall(resp.text)
         return {
             "title": title,
+            "version": version,
             "hoster_link": links[0] if links else None,
         }
 

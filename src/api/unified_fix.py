@@ -33,6 +33,12 @@ class UnifiedFixFetcher:
 
         if not isinstance(of_results, Exception) and of_results:
             of_best = of_results[0]
+            # Fetch the actual game page to get the correct version (OnlineFix hides it in the page body)
+            try:
+                page_info = await onlinefix_api.get_game_page(of_best["url"])
+                of_best["version"] = page_info.get("version", of_best.get("version", "0.0.0"))
+            except Exception:
+                pass
             of_best["source"] = "onlinefix"
             fixes.append(of_best)
             
