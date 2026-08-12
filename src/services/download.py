@@ -165,6 +165,14 @@ class DownloadManager:
             sls_manager.add_additional_app(app_id)
 
         parsed = DownloadManager._parse_lua(lua_content, app_id)
+        
+        # Register all depot-less DLCs so the emulator unlocks them
+        for dlc_id in parsed.get("dlcs", {}).keys():
+            try:
+                sls_manager.add_additional_app(int(dlc_id))
+            except ValueError:
+                pass
+
         depots = []
 
         for d_id, data in parsed.get("depots", {}).items():

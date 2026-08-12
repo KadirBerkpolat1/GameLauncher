@@ -43,6 +43,39 @@ class OnlineFixPatcher:
                 return exe
         return None
 
+
+    @staticmethod
+    def apply_freetp_exe(exe_path: str, app_id: str, game_dir: str) -> str:
+        """
+        FreeTP'den inen Inno Setup .exe dosyasini innoextract ile acar.
+        """
+        if not shutil.which("innoextract"):
+            raise FileNotFoundError("innoextract bulunamadi! Lutfen terminalden kurun: sudo pacman -S innoextract")
+            
+        tmp = tempfile.mkdtemp(prefix="freetp_")
+        try:
+            # -d tmp -e exe_path
+            subprocess.run(["innoextract", "-s", "-d", tmp, exe_path], check=True, capture_output=True)
+            
+            # Inno Setup genelde {app} klasoru altina cikarir
+            app_dir = Path(tmp) / "app"
+            src_dir = app_dir if app_dir.exists() else Path(tmp)
+            
+            # Kopyala
+            for root, dirs, files in os.walk(src_dir):
+                for file in files:
+                    src_file = Path(root) / file
+                    rel_path = src_file.relative_to(src_dir)
+                    dest_file = Path(game_dir) / rel_path
+                    dest_file.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src_file, dest_file)
+                    
+            OnlineFixPatcher._finalize(app_id, game_dir)
+            return tmp
+        except subprocess.CalledProcessError as e:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise RuntimeError(f"innoextract hatasi: {e.stderr.decode('utf-8', 'replace')}")
+
     @staticmethod
     def apply_patch_from_archive(rar_path: str, app_id: str, game_dir: str,
                                  password: str = ARCHIVE_PASSWORD) -> str:

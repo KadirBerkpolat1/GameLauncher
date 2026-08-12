@@ -54,6 +54,15 @@ _HOSTER_LINK_RE = re.compile(r'href="(https://hosters\.online-fix\.me:2053/[^"]+
 _GAME_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.S)
 
 
+# Extracts versions like v1.8.6, 1.8.6, build 1234
+_VERSION_RE = re.compile(r"(?:v\.?|version|build)?\s*(\d+(?:\.\d+)*[a-zA-Z]*)", re.IGNORECASE)
+
+def _extract_version(text: str) -> str:
+    matches = _VERSION_RE.findall(text)
+    if matches:
+        return matches[-1]
+    return "0.0.0"
+
 def _normalize(s: str) -> str:
     """Arama/karsilastirma icin sadece alfanumerik karakterler birakir."""
     return re.sub(r"[\W_]+", "", s.lower())
@@ -166,7 +175,8 @@ class OnlineFixClient:
             if url_match in seen:
                 continue
             seen.add(url_match)
-            items.append({"title": html.unescape(title).strip(), "url": url_match})
+            version = _extract_version(title)
+            items.append({"title": html.unescape(title).strip(), "url": url_match, "version": version})
         return items
 
     # ------------------------------------------------------------------ #

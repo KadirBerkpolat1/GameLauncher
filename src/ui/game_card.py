@@ -336,73 +336,66 @@ class GameCard(QFrame):
         from urllib.parse import urlparse, unquote
 
         from PySide6.QtWidgets import QMessageBox
-
-        from src.api.onlinefix import OnlineFixClient, OnlineFixError, OnlineFixNotFoundError
+        from src.api.onlinefix import onlinefix_api, OnlineFixError, OnlineFixNotFoundError
+        from src.api.freetp import freetp_api
+        from src.api.unified_fix import UnifiedFixFetcher
         from src.utils.onlinefix_patcher import OnlineFixPatcher
+        import tempfile
+        from urllib.parse import unquote, urlparse
 
         target_path = getattr(self, '_fix_target_path', None)
         if not target_path:
             return
 
-        client = OnlineFixClient()
         downloaded = None
         extracted_tmp = None
         used_online = False
         try:
-            self.btn_apply_fix.setText("Oyun aranıyor...")
-            results = await client.search_game(self.title)
-            if not results:
-                raise OnlineFixNotFoundError("Oyun online-fix.me'de bulunamadı.")
+            self.btn_apply_fix.setText("Yama aranıyor...")
+            best_fix, source = await UnifiedFixFetcher.get_best_fix(self.title)
+            
+            if not best_fix:
+                raise OnlineFixNotFoundError("Oyun Online-Fix.me veya FreeTP'de bulunamadı.")
 
-            # Birden fazla sonuç varsa kullanıcı seçer (yanlış fix riski sıfırlanır).
-            if len(results) > 1:
-                dlg = _GamePickDialog(results, self)
-                if dlg.exec() != QDialog.DialogCode.Accepted:
-                    return
-                picked = dlg.selected()
-                if not picked.get("url"):
-                    return
-                game_url = picked["url"]
+            self.btn_apply_fix.setText(f"İndiriliyor ({source})...")
+            
+            if source == "onlinefix":
+                # OnlineFix indirme adimlari
+                game_url = best_fix["url"]
+                page = await onlinefix_api.get_game_page(game_url)
+                hoster_url = page.get("hoster_link")
+                if not hoster_url:
+                    raise OnlineFixNotFoundError("Hoster bağlantısı bulunamadı.")
+
+                game_name = unquote(urlparse(hoster_url).path.strip("/"))
+                entries = await onlinefix_api.get_fix_entries(game_name)
+                fix = onlinefix_api.pick_fix(entries)
+                if not fix:
+                    raise OnlineFixNotFoundError("Güvenli fix dosyası bulunamadı.")
+
+                direct, cookies = await onlinefix_api.resolve_direct(fix)
+                dest = Path(tempfile.gettempdir()) / f"ofme_{self.app_id}_{fix['file_name']}"
+                self.btn_apply_fix.setText(f"İndiriliyor: {fix['file_name'][:24]}")
+                await onlinefix_api.download(direct, str(dest), cookies)
+                downloaded = str(dest)
+
+                self.btn_apply_fix.setText("Uygulanıyor...")
+                extracted_tmp = OnlineFixPatcher.apply_patch_from_archive(
+                    downloaded, str(self.app_id), target_path
+                )
             else:
-                game_url = results[0]["url"]
-                found_title = results[0].get("title", "")
-                if found_title and not _titles_match(found_title, self.title):
-                    box = QMessageBox(self)
-                    box.setWindowTitle("Oyun Eşleşmedi")
-                    box.setIcon(QMessageBox.Icon.Warning)
-                    box.setText(
-                        f"online-fix.me'de bulunan oyun:\n<b>{found_title}</b>\n\n"
-                        f"Sizin seçiminiz:\n<b>{self.title}</b>\n\n"
-                        "Yine de bu fix'i indirip uygulamak ister misiniz?"
-                    )
-                    btn_yes = box.addButton("Evet, uygula", QMessageBox.ButtonRole.AcceptRole)
-                    box.addButton("Hayır, iptal", QMessageBox.ButtonRole.RejectRole)
-                    box.exec()
-                    if box.clickedButton() is not btn_yes:
-                        return
+                # FreeTP indirme adimlari
+                article_url = best_fix["url"]
+                dest_dir = Path(tempfile.gettempdir())
+                self.btn_apply_fix.setText("FreeTP'den indiriliyor...")
+                dest_file = await freetp_api.download_fix(article_url, dest_dir)
+                if not dest_file:
+                    raise OnlineFixNotFoundError("FreeTP fix bağlantısı bulunamadı veya indirilemedi.")
+                
+                downloaded = str(dest_file)
+                self.btn_apply_fix.setText("Uygulanıyor (innoextract)...")
+                extracted_tmp = OnlineFixPatcher.apply_freetp_exe(downloaded, str(self.app_id), target_path)
 
-            self.btn_apply_fix.setText("İndirme linkleri alınıyor...")
-            page = await client.get_game_page(game_url)
-            hoster_url = page.get("hoster_link")
-            if not hoster_url:
-                raise OnlineFixNotFoundError("Hoster bağlantısı bulunamadı.")
-
-            game_name = unquote(urlparse(hoster_url).path.strip("/"))
-            entries = await client.get_fix_entries(game_name)
-            fix = client.pick_fix(entries)
-            if not fix:
-                raise OnlineFixNotFoundError("Güvenli fix dosyası bulunamadı.")
-
-            direct, cookies = await client.resolve_direct(fix)
-            dest = os.path.join(tempfile.gettempdir(), f"ofme_{self.app_id}_{fix['file_name']}")
-            self.btn_apply_fix.setText(f"İndiriliyor: {fix['file_name'][:24]}")
-            await client.download(direct, dest, cookies)
-            downloaded = dest
-
-            self.btn_apply_fix.setText("Uygulanıyor...")
-            extracted_tmp = OnlineFixPatcher.apply_patch_from_archive(
-                downloaded, str(self.app_id), target_path
-            )
             used_online = True
         except OnlineFixNotFoundError as e:
             # Doğru fix bulunamadı: sessizce yerel şablona düşme, önce kullanıcıya sor.
@@ -456,7 +449,6 @@ class GameCard(QFrame):
             if extracted_tmp and os.path.isdir(extracted_tmp):
                 import shutil
                 shutil.rmtree(extracted_tmp, ignore_errors=True)
-            await client.close()
 
         if used_online:
             QMessageBox.information(
