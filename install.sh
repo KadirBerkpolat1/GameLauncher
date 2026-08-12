@@ -33,6 +33,10 @@ ask() {
     else
         REPLY=""
     fi
+    # Default 'E' (yes) if user just presses Enter
+    if [ -z "$REPLY" ]; then
+        REPLY="e"
+    fi
 }
 
 echo -e "${CYAN}╔══════════════════════════════════════════════╗${NC}"
@@ -122,14 +126,15 @@ else
     echo -e "  ${YELLOW}  ! Eksik bağımlılıklar:$MISSING_NAMES${NC}"
     echo -e "  ${YELLOW}    Bu araçlar yama kurulumu (OnlineFix/FreeTP) için gereklidir.${NC}"
     if command -v sudo &> /dev/null && [ -z "${NONINTERACTIVE:-}" ]; then
-        ask "  Eksik paketler otomatik kurulsun mu? [e/H]: "
+        ask "  Eksik paketler otomatik kurulsun mu? [E/h]: "
         if [[ "$REPLY" =~ ^[eEyY]$ ]]; then
             if command -v pacman &> /dev/null; then
-                sudo pacman -S --needed $MISSING_PKGS_ARCH
+                # --noconfirm prevents pacman from eating the script from stdin when curl|bash is used
+                sudo pacman -S --noconfirm --needed $MISSING_PKGS_ARCH < /dev/tty
             elif command -v apt-get &> /dev/null; then
-                sudo apt-get update && sudo apt-get install -y $MISSING_PKGS_DEB
+                sudo apt-get update && sudo apt-get install -y $MISSING_PKGS_DEB < /dev/tty
             elif command -v dnf &> /dev/null; then
-                sudo dnf install -y $MISSING_PKGS_DNF
+                sudo dnf install -y $MISSING_PKGS_DNF < /dev/tty
             else
                 echo -e "${RED}    Dağıtım algılanamadı, elle kurun:$MISSING_NAMES${NC}"
             fi
