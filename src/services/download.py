@@ -215,7 +215,7 @@ class DownloadManager:
         try:
             if cache_file.exists():
                 age = datetime.now().timestamp() - cache_file.stat().st_mtime
-                if age < 7 * 24 * 3600:
+                if age < 30 * 24 * 3600:
                     logger.info(f"Manifest ZIP for {app_id} loaded from cache")
                     return cache_file.read_bytes()
         except OSError:
