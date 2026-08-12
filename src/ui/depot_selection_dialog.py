@@ -148,15 +148,6 @@ class DepotSelectionDialog(QDialog):
             no_dlc.setStyleSheet("color: #8B949E; padding: 8px;")
             layout.addWidget(no_dlc)
 
-        # --- Extra Options ---
-        extra_group = QGroupBox("Ek Seçenekler")
-        extra_group.setStyleSheet("QGroupBox { font-weight: bold; color: #E6EDF3; border: 1px solid #30363D; border-radius: 6px; margin-top: 8px; padding: 8px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; }")
-        extra_layout = QVBoxLayout(extra_group)
-        self.patch_checkbox = QCheckBox("Steam Korumasını Kaldır / Çevrimiçi Yama Uygula (Goldberg, OnlineFix vb.)")
-        self.patch_checkbox.setStyleSheet(CHECKBOX_STYLE)
-        self.patch_checkbox.setChecked(True) # Varsayılan olarak açık olsun
-        extra_layout.addWidget(self.patch_checkbox)
-        layout.addWidget(extra_group)
 
         # --- Buttons ---
         btn_layout = QHBoxLayout()
@@ -216,4 +207,4 @@ class DepotSelectionDialog(QDialog):
 
 
     def wants_patch(self) -> bool:
-        return self.patch_checkbox.isChecked()
+        return False
