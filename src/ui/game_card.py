@@ -195,17 +195,21 @@ class GameCard(QFrame):
         self._start_network_fetch(0)
 
     def _start_network_fetch(self, index: int) -> None:
-        if index < len(self.image_urls):
-            self.current_url_index = index
-            request = QNetworkRequest(QUrl(self.image_urls[index]))
-            self.network_manager.get(request)
-        else:
-            if not getattr(self, '_steam_fallback_tried', False):
-                self._steam_fallback_tried = True
-                get_async_loop().create_task(self._fetch_steam_api_fallback())
+        try:
+            if index < len(self.image_urls):
+                self.current_url_index = index
+                request = QNetworkRequest(QUrl(self.image_urls[index]))
+                if hasattr(self, 'network_manager') and self.network_manager:
+                    self.network_manager.get(request)
             else:
-                self.image_label.setText("No Image Available")
-                self.image_load_failed.emit(self)
+                if not getattr(self, '_steam_fallback_tried', False):
+                    self._steam_fallback_tried = True
+                    get_async_loop().create_task(self._fetch_steam_api_fallback())
+                else:
+                    self.image_label.setText("No Image")
+                    self.image_load_failed.emit(self)
+        except (RuntimeError, Exception):
+            pass
 
     async def _fetch_steam_api_fallback(self) -> None:
         try:
@@ -224,30 +228,35 @@ class GameCard(QFrame):
                             self._start_network_fetch(len(self.image_urls) - 1)
                             return
         except Exception as e:
-            print(f"Steam API fallback error: {e}")
+            pass
 
-        self.image_label.setText("No Image Available")
-        self.image_load_failed.emit(self)
+        try:
+            self.image_label.setText("No Image")
+            self.image_load_failed.emit(self)
+        except Exception:
+            pass
 
     def _on_image_loaded(self, reply: QNetworkReply) -> None:
-        status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
-        if reply.error() == QNetworkReply.NetworkError.NoError and status_code == 200:
-            image_data = reply.readAll()
-            image = QImage()
-            image.loadFromData(image_data)
+        try:
+            status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
+            if reply.error() == QNetworkReply.NetworkError.NoError and status_code == 200:
+                image_data = reply.readAll()
+                image = QImage()
+                image.loadFromData(image_data)
 
-            pixmap = QPixmap(image).scaled(
-                230, 310,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation
-            )
-            self.image_label.setPixmap(pixmap)
-            self.image_label.setText("")
-        else:
-            self._fetch_image(getattr(self, 'current_url_index', 0) + 1)
-
-        reply.deleteLater()
-
+                pixmap = QPixmap(image).scaled(
+                    230, 310,
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                self.image_label.setPixmap(pixmap)
+                self.image_label.setText("")
+            else:
+                self._fetch_image(getattr(self, 'current_url_index', 0) + 1)
+        except (RuntimeError, Exception):
+            pass
+        finally:
+            reply.deleteLater()
     # =========================================================================
     # ACTIONS: LIBRARY & FIX PATCHING
     # =========================================================================
