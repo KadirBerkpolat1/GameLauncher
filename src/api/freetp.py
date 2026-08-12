@@ -2,9 +2,7 @@
 FreeTP.org Scraper API for fetching game versions and multiplayer fixes.
 """
 import re
-import asyncio
-import httpx
-from bs4 import BeautifulSoup
+import html as html_lib
 from typing import Optional, Dict, Tuple
 from pathlib import Path
 
@@ -50,17 +48,14 @@ class FreeTPClient:
             
             # The HTML is encoded in cp1251
             html = resp.content.decode('cp1251', errors='replace')
-            soup = BeautifulSoup(html, 'html.parser')
             
             query_norm = self._normalize(query)
             
-            for item in soup.find_all('div', class_='heading'):
-                a_tag = item.find('a')
-                if not a_tag:
-                    continue
-                    
-                title = a_tag.text.strip()
-                url = a_tag['href']
+            matches = re.finditer(r'<div class="heading">.*?<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a></div>', html, re.IGNORECASE | re.DOTALL)
+            for m in matches:
+                url = m.group(1)
+                title = re.sub(r'<[^>]+>', '', m.group(2)).strip()
+                title = html_lib.unescape(title)
                 
                 # Check if the title actually matches the query
                 title_norm = self._normalize(title)
@@ -79,22 +74,24 @@ class FreeTPClient:
         try:
             resp = await self._client.get(article_url)
             html = resp.content.decode('cp1251', errors='replace')
-            soup = BeautifulSoup(html, 'html.parser')
             
             fix_link = None
-            # Find the download link for the fix (usually contains 'Fix' or 'Multiplayer')
-            for a in soup.find_all('a'):
-                href = a.get('href', '')
-                text = a.text.lower()
-                if "getfile" in href and ("fix" in text or "фикс" in text):
+            getfile_links = []
+            matches = re.finditer(r'<a[^>]+href=["\'](/getfile-[^"\']+)["\'][^>]*>(.*?)</a>', html, re.IGNORECASE | re.DOTALL)
+            for m in matches:
+                href = m.group(1)
+                text = re.sub(r'<[^>]+>', '', m.group(2)).strip().lower()
+                getfile_links.append(href)
+                if "fix" in text or "фикс" in text or "multiplayer" in text:
                     fix_link = href
                     break
             
             if not fix_link:
                 # Fallback: maybe just take the second getfile link? The first is usually the game torrent.
-                getfile_links = [a.get('href') for a in soup.find_all('a') if "getfile" in a.get('href', '')]
                 if len(getfile_links) >= 2:
                     fix_link = getfile_links[1]
+                elif len(getfile_links) == 1:
+                    fix_link = getfile_links[0]
                 else:
                     return None
 
