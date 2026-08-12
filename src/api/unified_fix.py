@@ -19,48 +19,34 @@ def parse_version(v: str) -> tuple:
 
 class UnifiedFixFetcher:
     @staticmethod
-    async def get_best_fix(game_name: str) -> Tuple[Optional[Dict], Optional[str]]:
+    async def get_available_fixes(game_name: str) -> list:
         """
         Searches both Online-Fix and FreeTP for the game.
-        Returns (best_result_dict, source_name).
-        Result dict contains at least 'url', 'version', 'title'.
-        source_name is either 'onlinefix' or 'freetp'.
+        Returns a list of dictionaries with keys: 'source', 'title', 'version', 'url'.
         """
         of_task = onlinefix_api.search_game(game_name, limit=1)
         ft_task = freetp_api.search_game(game_name)
 
         of_results, ft_result = await asyncio.gather(of_task, ft_task, return_exceptions=True)
 
-        of_best = None
+        fixes = []
+
         if not isinstance(of_results, Exception) and of_results:
             of_best = of_results[0]
+            of_best["source"] = "onlinefix"
+            fixes.append(of_best)
             
-        ft_best = None
         if not isinstance(ft_result, Exception) and ft_result:
             ft_best = ft_result
+            ft_best["source"] = "freetp"
+            fixes.append(ft_best)
 
-        if not of_best and not ft_best:
-            return None, None
-
-        if of_best and not ft_best:
-            return of_best, "onlinefix"
-            
-        if ft_best and not of_best:
-            return ft_best, "freetp"
-
-        # Compare versions
-        v_of = of_best.get("version", "0.0.0")
-        v_ft = ft_best.get("version", "0.0.0")
-
-        try:
-            p_of = parse_version(v_of)
-            p_ft = parse_version(v_ft)
-        except:
-            p_of = (0,)
-            p_ft = (0,)
-
-        # if freetp is strictly newer, pick freetp. Otherwise onlinefix.
-        if p_ft > p_of:
-            return ft_best, "freetp"
-        
-        return of_best, "onlinefix"
+        # Sort fixes so the highest version comes first
+        def get_ver_tuple(fix):
+            try:
+                return parse_version(fix.get("version", "0.0.0"))
+            except:
+                return (0,)
+                
+        fixes.sort(key=get_ver_tuple, reverse=True)
+        return fixes

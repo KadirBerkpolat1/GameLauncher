@@ -352,13 +352,24 @@ class GameCard(QFrame):
         used_online = False
         try:
             self.btn_apply_fix.setText("Yama aranıyor...")
-            best_fix, source = await UnifiedFixFetcher.get_best_fix(self.title)
+            fixes = await UnifiedFixFetcher.get_available_fixes(self.title)
             
-            if not best_fix:
+            if not fixes:
                 raise OnlineFixNotFoundError("Oyun Online-Fix.me veya FreeTP'de bulunamadı.")
+                
+            # Ana thread'de (UI thread) dialog acmaliyiz.
+            from src.ui.fix_pick_dialog import FixPickDialog
+            dlg = FixPickDialog(fixes, self)
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                return
+                
+            best_fix = dlg.get_selected_fix()
+            if not best_fix:
+                return
+                
+            source = best_fix["source"]
 
             self.btn_apply_fix.setText(f"İndiriliyor ({source})...")
-            
             if source == "onlinefix":
                 # OnlineFix indirme adimlari
                 game_url = best_fix["url"]

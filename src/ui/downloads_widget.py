@@ -264,36 +264,48 @@ class DownloadsWidget(QWidget):
                                                 from src.api.freetp import freetp_api
                                                 import tempfile
                                                 from pathlib import Path
-                                                from urllib.parse import unquote, urlparse
-                                                
-                                                best_fix, source = await UnifiedFixFetcher.get_best_fix(title)
-                                                if not best_fix:
+                                                fixes = await UnifiedFixFetcher.get_available_fixes(title)
+                                                if not fixes:
                                                     # Fallback to local
                                                     OnlineFixPatcher.apply_patch(str(app_id), task.download_dir)
-                                                else:
-                                                    if source == "onlinefix":
-                                                        page = await onlinefix_api.get_game_page(best_fix["url"])
-                                                        hoster_url = page.get("hoster_link")
-                                                        if hoster_url:
-                                                            game_name = unquote(urlparse(hoster_url).path.strip("/"))
-                                                            entries = await onlinefix_api.get_fix_entries(game_name)
-                                                            fix = onlinefix_api.pick_fix(entries)
-                                                            if fix:
-                                                                direct, cookies = await onlinefix_api.resolve_direct(fix)
-                                                                dest = Path(tempfile.gettempdir()) / f"ofme_{app_id}_{fix['file_name']}"
-                                                                await onlinefix_api.download(direct, str(dest), cookies)
-                                                                OnlineFixPatcher.apply_patch_from_archive(str(dest), str(app_id), task.download_dir)
-                                                            else:
-                                                                OnlineFixPatcher.apply_patch(str(app_id), task.download_dir)
+                                                    return
+                                                    
+                                                from src.ui.fix_pick_dialog import FixPickDialog
+                                                dlg = FixPickDialog(fixes, self)
+                                                if dlg.exec() != QDialog.DialogCode.Accepted:
+                                                    print(f"User canceled fix pick for {app_id}, skipping online patch.")
+                                                    OnlineFixPatcher.apply_patch(str(app_id), task.download_dir)
+                                                    return
+                                                    
+                                                best_fix = dlg.get_selected_fix()
+                                                if not best_fix:
+                                                    OnlineFixPatcher.apply_patch(str(app_id), task.download_dir)
+                                                    return
+                                                    
+                                                source = best_fix["source"]
+                                                if source == "onlinefix":
+                                                    page = await onlinefix_api.get_game_page(best_fix["url"])
+                                                    hoster_url = page.get("hoster_link")
+                                                    if hoster_url:
+                                                        game_name = unquote(urlparse(hoster_url).path.strip("/"))
+                                                        entries = await onlinefix_api.get_fix_entries(game_name)
+                                                        fix = onlinefix_api.pick_fix(entries)
+                                                        if fix:
+                                                            direct, cookies = await onlinefix_api.resolve_direct(fix)
+                                                            dest = Path(tempfile.gettempdir()) / f"ofme_{app_id}_{fix['file_name']}"
+                                                            await onlinefix_api.download(direct, str(dest), cookies)
+                                                            OnlineFixPatcher.apply_patch_from_archive(str(dest), str(app_id), task.download_dir)
                                                         else:
                                                             OnlineFixPatcher.apply_patch(str(app_id), task.download_dir)
                                                     else:
-                                                        dest_dir = Path(tempfile.gettempdir())
-                                                        dest_file = await freetp_api.download_fix(best_fix["url"], dest_dir)
-                                                        if dest_file:
-                                                            OnlineFixPatcher.apply_freetp_exe(str(dest_file), str(app_id), task.download_dir)
-                                                        else:
-                                                            OnlineFixPatcher.apply_patch(str(app_id), task.download_dir)
+                                                        OnlineFixPatcher.apply_patch(str(app_id), task.download_dir)
+                                                else:
+                                                    dest_dir = Path(tempfile.gettempdir())
+                                                    dest_file = await freetp_api.download_fix(best_fix["url"], dest_dir)
+                                                    if dest_file:
+                                                        OnlineFixPatcher.apply_freetp_exe(str(dest_file), str(app_id), task.download_dir)
+                                                    else:
+                                                        OnlineFixPatcher.apply_patch(str(app_id), task.download_dir)
                                                 
                                                 subprocess.Popen(["steam"], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                                                 QMessageBox.information(self, "Başarılı", "Yama uygulandı ve Steam yeniden başlatılıyor!")
