@@ -47,7 +47,10 @@ class GameCard(QFrame):
 
     def __init__(self, app_id: int, title: str, image_url: str = "", mode: str = "search") -> None:
         super().__init__()
-        self.app_id = app_id
+        try:
+            self.app_id = int(app_id)
+        except (ValueError, TypeError):
+            self.app_id = 0
         self.title = title
         self.image_url = image_url
         self.mode = mode

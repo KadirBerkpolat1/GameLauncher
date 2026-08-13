@@ -181,9 +181,10 @@ class LibraryWidget(QWidget):
         self._all_cards.clear()
         for i in reversed(range(self.grid_layout.count())):
             item = self.grid_layout.itemAt(i)
-            if item.widget() and item.widget() != self.empty_widget:
-                item.widget().deleteLater()
-
+            if item and item.widget() != self.empty_widget:
+                taken = self.grid_layout.takeAt(i)
+                if taken and taken.widget():
+                    taken.widget().deleteLater()
     def refresh_library(self) -> None:
         self.load_library()
 

@@ -94,7 +94,7 @@ class SearchWidget(QWidget):
         self.search_input.setPlaceholderText("🔍  Search by game title or keyword...")
         self.search_input.setMinimumHeight(42)
         self.search_input.textChanged.connect(self._on_text_changed)
-
+        self.search_input.returnPressed.connect(self._perform_search)
         self.cb_appid = QCheckBox("AppID Search")
         self.cb_appid.setStyleSheet("font-weight: 600;")
         self.cb_appid.toggled.connect(lambda: self._perform_search() if self.search_input.text().strip() else None)
@@ -206,9 +206,10 @@ class SearchWidget(QWidget):
     def _clear_results(self) -> None:
         for i in reversed(range(self.results_layout.count())):
             item = self.results_layout.itemAt(i)
-            if item.widget() and item.widget() != self.status_card:
-                item.widget().deleteLater()
-
+            if item and item.widget() != self.status_card:
+                taken = self.results_layout.takeAt(i)
+                if taken and taken.widget():
+                    taken.widget().deleteLater()
     def _perform_search(self) -> None:
         query = self.search_input.text().strip()
         if not query:
@@ -290,7 +291,12 @@ class SearchWidget(QWidget):
         ranked = _rank_search_results(query, results)
 
         for game in ranked:
-            app_id = game.get("game_id", 0)
+            raw_id = game.get("game_id", 0)
+            try:
+                app_id = int(raw_id)
+            except (ValueError, TypeError):
+                app_id = 0
+
             title = game.get("game_name", "Unknown Game")
             image_url = game.get("header_image", "")
 
