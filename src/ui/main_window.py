@@ -1,9 +1,11 @@
+import asyncio
+import shutil
 import subprocess
 from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
                                QPushButton, QStackedWidget, QLabel, QSpacerItem, 
                                QSizePolicy, QButtonGroup, QFrame)
 from PySide6.QtCore import Qt, QTimer
-
+from src.utils.async_utils import get_async_loop
 from src.ui.search_widget import SearchWidget
 from src.ui.library_widget import LibraryWidget
 from src.ui.downloads_widget import DownloadsWidget
@@ -268,49 +270,74 @@ class MainWindow(QMainWindow):
     def _restart_steam(self) -> None:
         self.btn_restart_steam.setEnabled(False)
         self.btn_restart_steam.setText("⏳   Closing Steam...")
+        get_async_loop().create_task(self._async_restart_steam())
 
-        # Attempt graceful shutdown first
+    async def _async_restart_steam(self) -> None:
         try:
-            subprocess.run(["steam", "-shutdown"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except Exception:
-            pass
+            # Check if Steam is running
+            proc = await asyncio.create_subprocess_exec(
+                "pgrep", "-x", "steam",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            is_running = (proc.returncode == 0)
 
-        def _force_kill_and_start():
-            try:
-                res = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
-                if res.returncode == 0:
-                    subprocess.run(["pkill", "-TERM", "-x", "steam"], check=False)
-            except Exception:
-                pass
+            if is_running:
+                # Graceful shutdown request
+                try:
+                    shutdown_proc = await asyncio.create_subprocess_exec(
+                        "steam", "-shutdown",
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL
+                    )
+                    try:
+                        await asyncio.wait_for(shutdown_proc.wait(), timeout=2.5)
+                    except asyncio.TimeoutError:
+                        pass
+                except Exception:
+                    pass
+
+                await asyncio.sleep(1.0)
+
+                # Check if still running; if so, kill it
+                check_proc = await asyncio.create_subprocess_exec(
+                    "pgrep", "-x", "steam",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL
+                )
+                await check_proc.wait()
+                if check_proc.returncode == 0:
+                    kill_proc = await asyncio.create_subprocess_exec(
+                        "pkill", "-TERM", "-x", "steam",
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL
+                    )
+                    await kill_proc.wait()
+                    await asyncio.sleep(1.0)
 
             self.btn_restart_steam.setText("🚀   Starting Steam...")
-            QTimer.singleShot(1000, _do_start)
+            await asyncio.sleep(0.5)
 
-        def _do_start():
-            try:
-                import shutil
-                if shutil.which("steam"):
-                    subprocess.Popen(
-                        ["steam"],
-                        start_new_session=True,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL
-                    )
-                elif shutil.which("flatpak"):
-                    subprocess.Popen(
-                        ["flatpak", "run", "com.valvesoftware.Steam"],
-                        start_new_session=True,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL
-                    )
-            except Exception as e:
-                print(f"Error launching Steam: {e}")
+            if shutil.which("steam"):
+                subprocess.Popen(
+                    ["steam"],
+                    start_new_session=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            elif shutil.which("flatpak"):
+                subprocess.Popen(
+                    ["flatpak", "run", "com.valvesoftware.Steam"],
+                    start_new_session=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
 
-            QTimer.singleShot(2500, _finish_restart)
-
-        def _finish_restart():
+            await asyncio.sleep(3.0)
+        except Exception as e:
+            print(f"Error during Steam restart: {e}")
+        finally:
             self.btn_restart_steam.setText("🔄   Restart Steam")
             self.btn_restart_steam.setEnabled(True)
             self._update_steam_status()
-
-        QTimer.singleShot(1500, _force_kill_and_start)
