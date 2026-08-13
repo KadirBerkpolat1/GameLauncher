@@ -158,7 +158,9 @@ class SearchWidget(QWidget):
         # =====================================================================
         # PAGINATION BAR
         # =====================================================================
-        pagination_bar = QHBoxLayout()
+        self.pagination_widget = QWidget()
+        pagination_bar = QHBoxLayout(self.pagination_widget)
+        pagination_bar.setContentsMargins(0, 0, 0, 0)
         pagination_bar.setSpacing(10)
 
         self.btn_prev = QPushButton("◀  Prev")
@@ -191,8 +193,7 @@ class SearchWidget(QWidget):
         pagination_bar.addWidget(self.btn_go)
         pagination_bar.addStretch()
 
-        layout.addLayout(pagination_bar)
-
+        layout.addWidget(self.pagination_widget)
     def _on_text_changed(self, text: str) -> None:
         if len(text) >= 3:
             self.status_label.setText("⏳  Searching Hubcap API...")
@@ -221,6 +222,7 @@ class SearchWidget(QWidget):
 
     async def _fetch_search(self, query: str, is_appid: bool) -> None:
         try:
+            self.pagination_widget.hide()
             results = await hubcap_api.search_game(query, limit=100, appid=is_appid)
             data = results.get("results", []) if isinstance(results, dict) else results
             self._display_results(data)
@@ -228,6 +230,7 @@ class SearchWidget(QWidget):
             self._clear_results()
             self.status_label.setText(f"❌  Error: {e}")
             self.status_card.show()
+            self.pagination_widget.hide()
 
     def _load_library(self) -> None:
         loop = get_async_loop()
@@ -252,9 +255,9 @@ class SearchWidget(QWidget):
             else:
                 data = results if isinstance(results, list) else []
                 self.total_pages = max(1, self.current_page + (1 if len(data) == self.limit else 0))
-
             self.lbl_page.setText(f"Page {self.current_page} of {self.total_pages}")
             self.goto_input.setMaximum(self.total_pages)
+            self.pagination_widget.show()
             self._display_results(data)
         except Exception as e:
             self._clear_results()

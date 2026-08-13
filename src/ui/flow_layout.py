@@ -42,8 +42,7 @@ class FlowLayout(QLayout):
         return True
 
     def heightForWidth(self, width):
-        height = self.doLayout(QRect(0, 0, width, 0), True)
-        return height
+        return self.doLayout(QRect(0, 0, width, 0), True)
 
     def setGeometry(self, rect):
         super().setGeometry(rect)
@@ -70,7 +69,7 @@ class FlowLayout(QLayout):
 
         for item in self.itemList:
             wid = item.widget()
-            if wid and not wid.isVisible():
+            if wid and wid.isHidden():
                 continue
 
             item_w = item.sizeHint().width()
