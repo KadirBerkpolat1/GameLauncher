@@ -86,8 +86,11 @@ QScrollBar::handle:horizontal:hover {
     border-right: 1px solid #191E30;
 }
 
-#Sidebar QPushButton {
+#Sidebar QWidget, #Sidebar QLabel {
     background-color: transparent;
+}
+
+#Sidebar QPushButton {
     border: none;
     text-align: left;
     padding: 12px 18px;

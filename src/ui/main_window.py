@@ -29,8 +29,8 @@ class MainWindow(QMainWindow):
 
     def init_ui(self) -> None:
         central_widget = QWidget()
+        central_widget.setObjectName("CentralWidget")
         self.setCentralWidget(central_widget)
-
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
@@ -47,10 +47,11 @@ class MainWindow(QMainWindow):
 
         # App Brand & Logo - Clean modern typography
         brand_container = QWidget()
+        brand_container.setObjectName("BrandContainer")
+        brand_container.setStyleSheet("background: transparent;")
         brand_layout = QHBoxLayout(brand_container)
         brand_layout.setContentsMargins(20, 0, 20, 18)
         brand_layout.setSpacing(12)
-
         logo_box = QLabel("✦")
         logo_box.setFixedSize(34, 34)
         logo_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
