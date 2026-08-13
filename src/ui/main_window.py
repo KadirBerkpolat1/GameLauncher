@@ -175,8 +175,8 @@ class MainWindow(QMainWindow):
                 color: #FFFFFF;
             }
         """)
+        self.btn_restart_steam.clicked.connect(self._restart_steam)
         sidebar_layout.addWidget(self.btn_restart_steam)
-
         # =====================================================================
         # MAIN CONTENT AREA
         # =====================================================================
@@ -269,15 +269,48 @@ class MainWindow(QMainWindow):
         self.btn_restart_steam.setEnabled(False)
         self.btn_restart_steam.setText("⏳   Closing Steam...")
 
+        # Attempt graceful shutdown first
+        try:
+            subprocess.run(["steam", "-shutdown"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+
+        def _force_kill_and_start():
+            try:
+                res = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
+                if res.returncode == 0:
+                    subprocess.run(["pkill", "-TERM", "-x", "steam"], check=False)
+            except Exception:
+                pass
+
+            self.btn_restart_steam.setText("🚀   Starting Steam...")
+            QTimer.singleShot(1000, _do_start)
+
         def _do_start():
-            subprocess.Popen(["steam"], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                import shutil
+                if shutil.which("steam"):
+                    subprocess.Popen(
+                        ["steam"],
+                        start_new_session=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                elif shutil.which("flatpak"):
+                    subprocess.Popen(
+                        ["flatpak", "run", "com.valvesoftware.Steam"],
+                        start_new_session=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+            except Exception as e:
+                print(f"Error launching Steam: {e}")
+
+            QTimer.singleShot(2500, _finish_restart)
+
+        def _finish_restart():
             self.btn_restart_steam.setText("🔄   Restart Steam")
             self.btn_restart_steam.setEnabled(True)
             self._update_steam_status()
 
-        res = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
-        if res.returncode == 0:
-            subprocess.run(["steam", "-shutdown"], check=False)
-            QTimer.singleShot(4000, _do_start)
-        else:
-            _do_start()
+        QTimer.singleShot(1500, _force_kill_and_start)

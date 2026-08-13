@@ -1,59 +1,46 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ─────────────────────────────────────────────
-#  Nebula Launcher (GameLauncher) - Kurulum Betiği (Linux)
-#  Tek komutla çalışır:
+# ─────────────────────────────────────────────────────────────────────────────
+#  Nebula Game Launcher - Automated Installer & Updater (Linux)
+#  Single-line command:
 #    curl -fsSL https://cdn.jsdelivr.net/gh/KadirBerkpolat1/GameLauncher@main/install.sh | bash
-#  Güvenli yeniden çalıştırılabilir: mevcut kurulumu yükseltir.
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 
-RED='\033[0;31m'
+# ANSI Color Codes
+CYAN='\033[0;36m'
+PURPLE='\033[0;35m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
+RED='\033[0;31m'
+BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 APP_NAME="Nebula Launcher"
 BIN_NAME="gamelauncher"
+ALT_BIN_NAME="nebula"
 INSTALL_DIR="$HOME/.local/share/GameLauncher"
 BIN_LINK="$HOME/.local/bin/$BIN_NAME"
+ALT_BIN_LINK="$HOME/.local/bin/$ALT_BIN_NAME"
 DESKTOP_FILE="$HOME/.local/share/applications/$BIN_NAME.desktop"
 REPO_URL="https://github.com/KadirBerkpolat1/GameLauncher"
 BRANCH="${BRANCH:-main}"
 
-# ── Yardımcı: onay sorusu ──
-# curl | bash ile çalışırken stdin borudur; o zaman /dev/tty'den okur.
-ask() {
-    local prompt="$1"
-    if [ -t 0 ]; then
-        read -rp "$prompt" REPLY
-    elif [ -e /dev/tty ]; then
-        read -rp "$prompt" REPLY < /dev/tty
-    else
-        REPLY=""
-    fi
-    # Default 'E' (yes) if user just presses Enter
-    if [ -z "$REPLY" ]; then
-        REPLY="e"
-    fi
-}
-
-echo -e "${CYAN}╔══════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║        ${APP_NAME} - Kurulum Betiği          ║${NC}"
-echo -e "${CYAN}╚══════════════════════════════════════════════╝${NC}"
+echo -e "${PURPLE}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${PURPLE}║${BOLD}${CYAN}            ✦  NEBULA GAME LAUNCHER INSTALLER  ✦             ${NC}${PURPLE}║${NC}"
+echo -e "${PURPLE}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo
 
-# ── 1. Kaynak dizin çözümü ──
-echo -e "${YELLOW}[1/7]${NC} Kaynak hazırlanıyor..."
-# curl | bash ile çalışırken BASH_SOURCE[0] boştur; ".." güvenli bir varsayılandır.
+# ── 1. Resolve Source Files ──
+echo -e "${CYAN}[1/6]${NC} Preparing repository source..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" && pwd)"
 SOURCE_DIR="$SCRIPT_DIR"
 
 if [ ! -f "$SOURCE_DIR/src/main.py" ] || [ ! -f "$SOURCE_DIR/requirements.txt" ]; then
-    echo -e "  ${YELLOW}~${NC} Repo klasöründe değiliz, GitHub tarball indiriliyor..."
+    echo -e "  ${YELLOW}↓${NC} Fetching latest source archive from GitHub (${BRANCH})..."
     TMP_DIR="$(mktemp -d)"
     trap 'rm -rf "$TMP_DIR"' EXIT
+    
     if command -v curl &> /dev/null; then
         curl -fsSL -o "$TMP_DIR/gl.tar.gz" "$REPO_URL/archive/refs/heads/$BRANCH.tar.gz"
     elif command -v wget &> /dev/null; then
@@ -62,97 +49,68 @@ if [ ! -f "$SOURCE_DIR/src/main.py" ] || [ ! -f "$SOURCE_DIR/requirements.txt" ]
         git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$TMP_DIR/repo"
         SOURCE_DIR="$TMP_DIR/repo"
     fi
+    
     if [ -f "$TMP_DIR/gl.tar.gz" ]; then
         tar -xzf "$TMP_DIR/gl.tar.gz" -C "$TMP_DIR"
         SOURCE_DIR="$TMP_DIR/GameLauncher-$BRANCH"
     fi
-    echo -e "  ${GREEN}✓${NC} Kaynak hazır: $SOURCE_DIR"
+    echo -e "  ${GREEN}✓${NC} Source ready: $SOURCE_DIR"
 else
-    echo -e "  ${GREEN}✓${NC} Yerel repo kullanılıyor: $SOURCE_DIR"
+    echo -e "  ${GREEN}✓${NC} Using local source: $SOURCE_DIR"
 fi
 
-# ── 2. Python kontrolü ──
-echo -e "${YELLOW}[2/7]${NC} Python kontrol ediliyor..."
+# ── 2. Check Python Environment ──
+echo -e "${CYAN}[2/6]${NC} Checking Python runtime..."
 if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}HATA: python3 bulunamadı!${NC}"
-    echo "  Arch:   sudo pacman -S python"
-    echo "  Debian: sudo apt install python3 python3-venv python3-pip"
-    echo "  Fedora: sudo dnf install python3 python3-pip"
+    echo -e "  ${RED}ERROR: python3 was not found on your system!${NC}"
+    echo "  Please install Python 3.10+ using your package manager."
     exit 1
 fi
 
-PY_MAJOR=$(python3 -c "import sys; print(sys.version_info.major)")
-PY_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
+PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+echo -e "  ${GREEN}✓${NC} Found Python $PY_VERSION"
 
-if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 11 ]; }; then
-    echo -e "${RED}HATA: Python 3.11+ gerekli (mevcut: $PY_MAJOR.$PY_MINOR)${NC}"
-    exit 1
-fi
-echo -e "  ${GREEN}✓${NC} Python $PY_MAJOR.$PY_MINOR"
-
-# python3-venv (ensurepip) kontrolü
 if ! python3 -m venv --help > /dev/null 2>&1; then
-    echo -e "${RED}HATA: python3-venv modülü bulunamadı!${NC}"
+    echo -e "  ${RED}ERROR: python3-venv is missing!${NC}"
     echo "  Debian/Ubuntu: sudo apt install python3-venv"
-    echo "  Arch (ayrı paket gerekmiyor, python ile gelir)."
+    echo "  Arch/CachyOS:  sudo pacman -S python"
     exit 1
 fi
 
-
-# ── 3. Sistem bağımlılıkları (7z, innoextract) ──
-echo -e "${YELLOW}[3/7]${NC} Sistem bağımlılıkları kontrol ediliyor..."
+# ── 3. Check System Extraction Tools (7z, innoextract) ──
+echo -e "${CYAN}[3/6]${NC} Checking extraction helpers..."
 MISSING_PKGS_ARCH=""
 MISSING_PKGS_DEB=""
 MISSING_PKGS_DNF=""
-MISSING_NAMES=""
 
-if ! (command -v 7z &> /dev/null || command -v 7za &> /dev/null); then
+if ! (command -v 7z &> /dev/null || command -v 7za &> /dev/null || command -v 7zz &> /dev/null); then
     MISSING_PKGS_ARCH+=" p7zip"
     MISSING_PKGS_DEB+=" p7zip-full"
     MISSING_PKGS_DNF+=" p7zip p7zip-plugins"
-    MISSING_NAMES+=" 7z"
 fi
 
 if ! command -v innoextract &> /dev/null; then
     MISSING_PKGS_ARCH+=" innoextract"
     MISSING_PKGS_DEB+=" innoextract"
     MISSING_PKGS_DNF+=" innoextract"
-    MISSING_NAMES+=" innoextract"
 fi
 
-if [ -z "$MISSING_NAMES" ]; then
-    echo -e "  ${GREEN}✓${NC} 7z ve innoextract mevcut"
-else
-    echo -e "  ${YELLOW}  ! Eksik bağımlılıklar:$MISSING_NAMES${NC}"
-    echo -e "  ${YELLOW}    Bu araçlar yama kurulumu (OnlineFix/FreeTP) için gereklidir.${NC}"
-    if command -v sudo &> /dev/null && [ -z "${NONINTERACTIVE:-}" ]; then
-        ask "  Eksik paketler otomatik kurulsun mu? [E/h]: "
-        if [[ "$REPLY" =~ ^[eEyY]$ ]]; then
-            if command -v pacman &> /dev/null; then
-                # --noconfirm prevents pacman from eating the script from stdin when curl|bash is used
-                sudo pacman -S --noconfirm --needed $MISSING_PKGS_ARCH < /dev/tty
-            elif command -v apt-get &> /dev/null; then
-                sudo apt-get update && sudo apt-get install -y $MISSING_PKGS_DEB < /dev/tty
-            elif command -v dnf &> /dev/null; then
-                sudo dnf install -y $MISSING_PKGS_DNF < /dev/tty
-            else
-                echo -e "${RED}    Dağıtım algılanamadı, elle kurun:$MISSING_NAMES${NC}"
-            fi
-            echo -e "  ${GREEN}✓${NC} Kurulum denemesi tamamlandı"
-        else
-            echo -e "  ${YELLOW}  ~ Atlandı. Launcher çalışır ancak yama çıkartma (extract) işlemleri başarısız olabilir.${NC}"
-        fi
-    else
-        echo "    Arch:   sudo pacman -S$MISSING_PKGS_ARCH"
-        echo "    Debian: sudo apt install$MISSING_PKGS_DEB"
-        echo "    Fedora: sudo dnf install$MISSING_PKGS_DNF"
+if [ -n "$MISSING_PKGS_ARCH" ]; then
+    echo -e "  ${YELLOW}! Recommended helper tools missing:${NC}$MISSING_PKGS_ARCH"
+    if command -v pacman &> /dev/null && command -v sudo &> /dev/null; then
+        echo -e "  ${YELLOW}→${NC} Install with: sudo pacman -S$MISSING_PKGS_ARCH"
+    elif command -v apt-get &> /dev/null && command -v sudo &> /dev/null; then
+        echo -e "  ${YELLOW}→${NC} Install with: sudo apt install$MISSING_PKGS_DEB"
     fi
+else
+    echo -e "  ${GREEN}✓${NC} Extraction helpers present"
 fi
 
-# ── 4. Dosyaları kopyala ──
-echo -e "${YELLOW}[4/7]${NC} Dosyalar kopyalanıyor → $INSTALL_DIR"
+# ── 4. Synchronize Files ──
+echo -e "${CYAN}[4/6]${NC} Installing application files → $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 
+rm -rf "$INSTALL_DIR/src"
 cp -r "$SOURCE_DIR/src" "$INSTALL_DIR/"
 cp "$SOURCE_DIR/requirements.txt" "$INSTALL_DIR/"
 cp "$SOURCE_DIR/pyproject.toml" "$INSTALL_DIR/"
@@ -164,111 +122,79 @@ if [ -d "$SOURCE_DIR/assets" ]; then
     rm -rf "$INSTALL_DIR/assets"
     cp -r "$SOURCE_DIR/assets" "$INSTALL_DIR/"
 fi
-echo -e "  ${GREEN}✓${NC} Dosyalar kopyalandı"
+echo -e "  ${GREEN}✓${NC} Core files synchronized"
 
-# ── 5. Sanal ortam ve bağımlılıklar ──
-echo -e "${YELLOW}[5/7]${NC} Python sanal ortamı hazırlanıyor..."
+# ── 5. Setup Isolated Python Virtual Environment ──
+echo -e "${CYAN}[5/6]${NC} Setting up Python virtual environment..."
 if [ ! -d "$INSTALL_DIR/venv" ]; then
     python3 -m venv "$INSTALL_DIR/venv"
-    echo -e "  ${GREEN}✓${NC} Yeni sanal ortam oluşturuldu"
-else
-    echo -e "  ${YELLOW}~${NC} Mevcut sanal ortam kullanılıyor"
+    echo -e "  ${GREEN}✓${NC} Virtual environment created"
 fi
 
 "$INSTALL_DIR/venv/bin/python" -m pip install --quiet --upgrade pip
+"$INSTALL_DIR/venv/bin/python" -m pip install --quiet -r "$INSTALL_DIR/requirements.txt"
+echo -e "  ${GREEN}✓${NC} Python packages installed (PySide6, httpx, vdf, etc.)"
 
-# Önce pip install . (console script + pyproject bağımlılıkları), başarısız olursa
-# requirements.txt'e düş (ör. build backend indirilemiyorsa).
-if (cd "$SOURCE_DIR" && "$INSTALL_DIR/venv/bin/python" -m pip install --quiet .); then
-    echo -e "  ${GREEN}✓${NC} Bağımlılıklar pyproject üzerinden kuruldu"
-    INSTALLED_AS_PACKAGE=1
-else
-    echo -e "  ${YELLOW}~${NC} pip install . başarısız, requirements.txt ile deneniyor..."
-    "$INSTALL_DIR/venv/bin/python" -m pip install --quiet -r "$INSTALL_DIR/requirements.txt"
-    INSTALLED_AS_PACKAGE=0
-    echo -e "  ${GREEN}✓${NC} Bağımlılıklar requirements.txt üzerinden kuruldu"
-fi
-
-# ── 6. Çalıştırılabilir link ──
-echo -e "${YELLOW}[6/7]${NC} Sistem entegrasyonu yapılıyor..."
+# ── 6. System Integration (Binaries & Desktop Icon) ──
+echo -e "${CYAN}[6/6]${NC} Creating desktop entry and CLI shortcuts..."
 mkdir -p "$(dirname "$BIN_LINK")"
 
-if [ "${INSTALLED_AS_PACKAGE:-0}" -eq 1 ] && [ -x "$INSTALL_DIR/venv/bin/$BIN_NAME" ]; then
-    # Console script paket olarak kuruldu. Bundled DDMod binary'sini de
-    # site-packages'e taşı ki offline kurulumda BUNDLED_PATH bulunabilsin.
-    PURELIB="$("$INSTALL_DIR/venv/bin/python" -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")"
-    rm -rf "$PURELIB/assets"
-    cp -r "$INSTALL_DIR/assets" "$PURELIB/assets"
-    cat > "$BIN_LINK" << LAUNCHER
-#!/usr/bin/env bash
-exec "$INSTALL_DIR/venv/bin/$BIN_NAME" "\$@"
-LAUNCHER
-    echo -e "  ${GREEN}✓${NC} Console script bağlandı ($BIN_NAME)"
-else
-    cat > "$BIN_LINK" << 'LAUNCHER'
+# Executable launcher script
+cat > "$BIN_LINK" << 'LAUNCHER'
 #!/usr/bin/env bash
 INSTALL_DIR="$HOME/.local/share/GameLauncher"
 cd "$INSTALL_DIR"
 exec "$INSTALL_DIR/venv/bin/python" src/main.py "$@"
 LAUNCHER
-    echo -e "  ${YELLOW}~${NC} Kaynak moduyla çalışan bağlantı oluşturuldu"
-fi
 chmod +x "$BIN_LINK"
 
-# ── 7. Masaüstü kısayolu + ikon ──
-mkdir -p "$(dirname "$DESKTOP_FILE")"
+# Secondary alias 'nebula'
+cp "$BIN_LINK" "$ALT_BIN_LINK"
+chmod +x "$ALT_BIN_LINK"
 
-# assets/icons içinde bir ikon varsa ~/.local/share/icons altına kopyala.
-ICON_PATH=""
+# Desktop Entry
+mkdir -p "$(dirname "$DESKTOP_FILE")"
+ICON_PATH="applications-games"
+
 if [ -d "$SOURCE_DIR/assets/icons" ]; then
     ICON_SRC=$(find "$SOURCE_DIR/assets/icons" -maxdepth 1 \( -name '*.png' -o -name '*.svg' \) | head -n1 || true)
     if [ -n "$ICON_SRC" ]; then
-        ICON_NAME="gamelauncher"
-        ICON_EXT="${ICON_SRC##*.}"
         ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
         mkdir -p "$ICON_DIR"
-        cp "$ICON_SRC" "$ICON_DIR/$ICON_NAME.$ICON_EXT"
-        ICON_PATH="$ICON_NAME.$ICON_EXT"
+        cp "$ICON_SRC" "$ICON_DIR/$BIN_NAME.png"
+        ICON_PATH="$BIN_NAME.png"
     fi
-fi
-
-if [ -z "$ICON_PATH" ]; then
-    ICON_PATH="applications-games"
 fi
 
 cat > "$DESKTOP_FILE" << EOF
 [Desktop Entry]
 Name=$APP_NAME
-Comment=Linux Steam Game & DLC Manager
+Comment=Cyber-Dark Linux Steam Game & DLC Manager
 Exec=$BIN_LINK
 Icon=$ICON_PATH
 Terminal=false
 Type=Application
 Categories=Game;Utility;
-Keywords=steam;game;dlc;launcher;
+Keywords=steam;game;dlc;launcher;nebula;
 EOF
 
 if command -v update-desktop-database &> /dev/null; then
     update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 fi
-echo -e "  ${GREEN}✓${NC} Masaüstü kısayolu oluşturuldu"
+echo -e "  ${GREEN}✓${NC} Desktop integration complete"
 
-# ~/.local/bin PATH kontrolü
-if ! echo ":$PATH:" | grep -q ":$(dirname "$BIN_LINK"):"; then
+# PATH warning if needed
+if ! echo ":$PATH:" | grep -q ":$HOME/.local/bin:"; then
     echo
-    echo -e "${YELLOW}  ! Not: '$HOME/.local/bin' PATH'inizde yok.${NC}"
-    echo "    Shell profilinize şunu ekleyin:"
-    echo "      echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
-    echo "    Sonra: source ~/.bashrc"
+    echo -e "  ${YELLOW}! Note: '$HOME/.local/bin' is not in your PATH.${NC}"
+    echo "    Add it by running: echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
 fi
 
 echo
-echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║          Kurulum Başarıyla Tamamlandı!       ║${NC}"
-echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
+echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║${BOLD}            ✦  Installation Completed Successfully! ✦         ${NC}${GREEN}║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo
-echo -e "  Çalıştırmak için:  ${CYAN}$BIN_NAME${NC}"
-echo -e "  Veya menüden:      ${CYAN}$APP_NAME${NC} uygulamasını arayın"
-echo -e "  Kaldırmak için:    ${YELLOW}./uninstall.sh${NC} (repo) veya"
-echo -e "    ${CYAN}curl -fsSL https://cdn.jsdelivr.net/gh/KadirBerkpolat1/GameLauncher@main/uninstall.sh | bash${NC}"
+echo -e "  Launch via Terminal:  ${CYAN}gamelauncher${NC}  or  ${CYAN}nebula${NC}"
+echo -e "  Launch via Desktop:   Search for ${BOLD}${CYAN}$APP_NAME${NC} in your app launcher"
 echo
