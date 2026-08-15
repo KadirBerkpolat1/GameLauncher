@@ -168,26 +168,26 @@ class OnlineFixClient:
             for m in _BLOCK_RE.finditer(html_content):
                 links_json = m.group(1)
                 label = m.group(2).strip()
-                if not ("fix" in label.lower() or "repair" in label.lower()):
-                    continue
+                # Accept all hosters (label is the hoster name like FileDitch, Pixeldrain, etc.)
+                # The original filter looked for "fix" or "repair" in label but labels are hoster names
                 try:
                     links = json.loads(html.unescape(links_json))
                 except json.JSONDecodeError:
                     continue
 
                 for link_data in links:
-                    url = link_data.get("url", "")
+                    # JSON uses different keys: direct_link, file_name, id, is_dangerous
+                    url = link_data.get("direct_link", link_data.get("url", ""))
                     host = urlparse(url).netloc.lower().replace("www.", "")
                     if any(h in host for h in HOSTER_PRIORITY):
                         entries.append({
                             "label": label,
                             "url": url,
                             "hoster": host,
-                            "file_name": link_data.get("name", ""),
-                            "file_size": link_data.get("size", 0),
+                            "file_name": link_data.get("file_name", link_data.get("name", "")),
+                            "file_size": link_data.get("size", link_data.get("id", 0)),
                         })
                         break  # only first good hoster per block
-
             # Sort by hoster priority
             priority_map = {h: i for i, h in enumerate(HOSTER_PRIORITY)}
             entries.sort(key=lambda e: priority_map.get(e["hoster"], 99))
