@@ -44,7 +44,7 @@ class GameCard(QFrame):
     download_requested = Signal(int, str)
     uninstalled = Signal(int)
     image_load_failed = Signal(object)
-
+    cloud_status_changed = Signal(int, bool)  # app_id, is_enabled
     def __init__(self, app_id: int, title: str, image_url: str = "", mode: str = "search") -> None:
         super().__init__()
         try:
@@ -680,13 +680,8 @@ class GameCard(QFrame):
         is_active = self._is_cloud_enabled_for_game()
         if is_active:
             CloudRedirectManager.remove_game_hook(self.app_id)
-            QMessageBox.information(self, "Cloud Saves", f"Cloud save redirection disabled for {self.title}.")
-        else:
-            CloudRedirectManager.apply_game_hook(self.app_id)
-            QMessageBox.information(self, "Cloud Saves", f"Cloud save redirection enabled for {self.title}!\nSaves will sync to your configured provider.")
-
         self._update_cloud_btn_style()
-
+        self.cloud_status_changed.emit(self.app_id, not is_active)
     async def _async_install_and_enable_cloud(self) -> None:
         from src.services.cloud_redirect import CloudRedirectManager
         try:

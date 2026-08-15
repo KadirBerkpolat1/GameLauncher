@@ -295,6 +295,14 @@ class SettingsDialog(QDialog):
         self.btn_get_sgdb_key.setToolTip("Opens steamgriddb.com to get your API key")
         self.btn_get_sgdb_key.clicked.connect(lambda: self._open_url("https://www.steamgriddb.com"))
         sgdb_row.addWidget(self.btn_get_sgdb_key)
+        sgdb_layout.addLayout(sgdb_row)
+        
+        sgdb_desc = QLabel("Automatically downloads high-resolution vertical grid posters instead of generic Steam banners.")
+        sgdb_desc.setStyleSheet("color: #64748B; font-size: 12px;")
+        sgdb_desc.setWordWrap(True)
+        sgdb_layout.addWidget(sgdb_desc)
+        
+        layout.addWidget(group_sgdb)
 
         # =====================================================================
         # STEP-BY-STEP INSTRUCTIONS GUIDE CARD

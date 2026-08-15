@@ -23,9 +23,8 @@ CR_CONFIG_FILE = CR_DIR / "config.json"
 CR_TOKENS_DIR = CR_DIR / "tokens"
 
 # GitHub release info
-CR_REPO = "swwayps/cloudredirect-moon"
+CR_REPO = "Selectively11/CloudRedirect"
 CR_RELEASE_URL = f"https://api.github.com/repos/{CR_REPO}/releases/latest"
-
 # OAuth endpoints (CloudRedirect uses these)
 OAUTH_CONFIG = {
     "gdrive": {
@@ -85,29 +84,31 @@ class CloudRedirectManager:
                 version = release.get("tag_name", "unknown")
                 for asset in release.get("assets", []):
                     name = asset.get("name", "")
-                    if name.startswith("cloud_redirect-linux-") and name.endswith(".so"):
+                    if name == "cloud_redirect.so":
                         asset_url = asset.get("browser_download_url")
                         break
 
                 if not asset_url:
                     # Fallback: try to build from source or use a known URL
                     log("No prebuilt asset found, trying fallback URL...")
-                    asset_url = f"https://github.com/{CR_REPO}/releases/download/{version}/cloud_redirect-linux-{version.lstrip('v')}.so"
+                    asset_url = f"https://github.com/{CR_REPO}/releases/download/{version}/cloud_redirect.so"
 
                 log(f"Downloading cloud_redirect.so (version: {version})...")
                 CR_DIR.mkdir(parents=True, exist_ok=True)
                 CR_TOKENS_DIR.mkdir(parents=True, exist_ok=True)
 
-                async with client.stream("GET", asset_url, timeout=60.0) as resp:
-                    resp.raise_for_status()
-                    total = int(resp.headers.get("content-length", 0))
-                    downloaded = 0
-                    with open(CR_SO_PATH, "wb") as f:
-                        async for chunk in resp.aiter_bytes(8192):
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            if progress_callback and total:
-                                progress_callback(f"Downloading: {downloaded}/{total} bytes")
+                # Download with redirects support
+                async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as download_client:
+                    async with download_client.stream("GET", asset_url) as resp:
+                        resp.raise_for_status()
+                        total = int(resp.headers.get("content-length", 0))
+                        downloaded = 0
+                        with open(CR_SO_PATH, "wb") as f:
+                            async for chunk in resp.aiter_bytes(8192):
+                                f.write(chunk)
+                                downloaded += len(chunk)
+                                if progress_callback and total:
+                                    progress_callback(f"Downloading: {downloaded}/{total} bytes")
 
                 CR_SO_PATH.chmod(0o755)
 
@@ -123,8 +124,8 @@ class CloudRedirectManager:
         except Exception as e:
             log(f"Failed to install CloudRedirect: {e}")
             return False
-    @staticmethod
-    def get_config() -> Dict[str, Any]:
+    @classmethod
+    def get_config(cls) -> Dict[str, Any]:
         """Reads CloudRedirect configuration."""
         if CR_CONFIG_FILE.exists():
             try:
@@ -310,7 +311,7 @@ class CloudRedirectManager:
             return False
 
         try:
-            manager = SLSsteamConfigManager()
+            manager = LocalConfigManager()
             app_id_str = str(app_id)
 
             # Get current launch options
@@ -322,7 +323,7 @@ class CloudRedirectManager:
                 return True  # Already applied
 
             new_opts = f"{preload} {current_opts}".strip()
-            return manager.update_launch_options(app_id_str, new_opts)
+            return manager.set_launch_options(app_id_str, new_opts)
 
         except Exception as e:
             logger.error(f"Failed to apply CloudRedirect hook to {app_id}: {e}")
@@ -332,7 +333,7 @@ class CloudRedirectManager:
     def remove_game_hook(cls, app_id: int) -> bool:
         """Removes CloudRedirect hook from game's launch options."""
         try:
-            manager = SLSsteamConfigManager()
+            manager = LocalConfigManager()
             app_id_str = str(app_id)
 
             current_opts = manager.get_launch_options(app_id_str) or ""
@@ -346,12 +347,11 @@ class CloudRedirectManager:
             # Clean up double spaces
             new_opts = " ".join(new_opts.split())
 
-            return manager.update_launch_options(app_id_str, new_opts)
+            return manager.set_launch_options(app_id_str, new_opts)
 
         except Exception as e:
             logger.error(f"Failed to remove CloudRedirect hook from {app_id}: {e}")
             return False
-
     @classmethod
     def get_hooked_games(cls) -> List[int]:
         """Returns list of app_ids that have CloudRedirect hook applied."""

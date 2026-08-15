@@ -333,6 +333,7 @@ class LibraryWidget(QWidget):
                 card = GameCard(app_id, title, image_url, mode="library")
                 card.download_requested.connect(self.download_requested.emit)
                 card.uninstalled.connect(lambda _app_id: self.load_library())
+                card.cloud_status_changed.connect(self._on_card_cloud_changed)
                 
                 self._all_cards.append(card)
                 self.grid_layout.addWidget(card)
@@ -359,3 +360,10 @@ class LibraryWidget(QWidget):
                 card.show()
             else:
                 card.hide()
+    def _on_card_cloud_changed(self, app_id: int, is_on: bool) -> None:
+        """Called when a game card's cloud status changes."""
+        # Find the card and update its button style
+        for card in self._all_cards:
+            if card.app_id == app_id:
+                card._update_cloud_btn_style()
+                break
