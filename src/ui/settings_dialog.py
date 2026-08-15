@@ -158,16 +158,15 @@ class SettingsDialog(QDialog):
         self.btn_test_key.setProperty("cssClass", "SecondaryAction")
         self.btn_test_key.clicked.connect(self._test_hubcap_key)
 
+        self.btn_get_hubcap_key = QPushButton("🔗  Get API Key")
+        self.btn_get_hubcap_key.setProperty("cssClass", "SecondaryAction")
+        self.btn_get_hubcap_key.setToolTip("Opens hubcapmanifest.com to get your API key")
+        self.btn_get_hubcap_key.clicked.connect(lambda: self._open_url("https://hubcapmanifest.com"))
+
         btn_row.addWidget(self.btn_show_key)
         btn_row.addWidget(self.btn_test_key)
+        btn_row.addWidget(self.btn_get_hubcap_key)
         btn_row.addStretch()
-
-        self.lbl_hubcap_status = QLabel("")
-        self.lbl_hubcap_status.setStyleSheet("font-size: 12px; font-weight: 600;")
-
-        hubcap_layout.addWidget(self.input_hubcap_key)
-        hubcap_layout.addLayout(btn_row)
-        hubcap_layout.addWidget(self.lbl_hubcap_status)
         layout.addWidget(group_hubcap)
 
         # Ryuu Manifest API Group
@@ -291,12 +290,11 @@ class SettingsDialog(QDialog):
         self.btn_test_sgdb.clicked.connect(self._on_test_sgdb_key)
         sgdb_row.addWidget(self.btn_test_sgdb)
 
-        sgdb_desc = QLabel("Automatically downloads high-resolution vertical grid posters instead of generic Steam banners.")
-        sgdb_desc.setStyleSheet("color: #64748B; font-size: 12px;")
-
-        sgdb_layout.addLayout(sgdb_row)
-        sgdb_layout.addWidget(sgdb_desc)
-        layout.addWidget(group_sgdb)
+        self.btn_get_sgdb_key = QPushButton("🔗  Get API Key")
+        self.btn_get_sgdb_key.setProperty("cssClass", "SecondaryAction")
+        self.btn_get_sgdb_key.setToolTip("Opens steamgriddb.com to get your API key")
+        self.btn_get_sgdb_key.clicked.connect(lambda: self._open_url("https://www.steamgriddb.com"))
+        sgdb_row.addWidget(self.btn_get_sgdb_key)
 
         # =====================================================================
         # STEP-BY-STEP INSTRUCTIONS GUIDE CARD
