@@ -5,7 +5,8 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit,
                                QPushButton, QLabel, QHBoxLayout, QCheckBox, 
                                QListWidget, QStackedWidget, QWidget, QComboBox, 
                                QGroupBox, QRadioButton, QMessageBox, QFileDialog,
-                               QFrame, QScrollArea, QProgressBar)
+                               QFrame, QScrollArea, QProgressBar, QProgressDialog,
+                               QApplication)
 from PySide6.QtCore import Qt
 from src.config.settings import SettingsManager
 from src.utils.paths import get_steam_path
@@ -805,24 +806,50 @@ class SettingsDialog(QDialog):
                 QMessageBox.critical(self, "Error", f"Failed to uninstall DDMod: {e}")
         loop.create_task(_async_uninstall())
 
-    def _install_slsteam_moon(self) -> None:
-        from src.services.plugin_manager import PluginManager
+    def _run_tool_with_progress(self, title: str,
+                                task, success_msg: str) -> None:
+        """Run an async install/uninstall with a live progress dialog.
+        `task` is an async callable receiving a log callback; its bool return
+        decides the success message. The terminal opened by the installer is
+        announced in the dialog so the user knows to enter the sudo password."""
         loop = get_async_loop()
+        dialog = QProgressDialog(title, None, 0, 0, self)
+        dialog.setWindowTitle(title)
+        dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        dialog.setCancelButton(None)
+        dialog.setMinimumDuration(0)
+        dialog.show()
+
+        def on_log(msg: str):
+            dialog.setLabelText(msg)
+            QApplication.processEvents()
 
         async def _task():
             try:
-                success = await PluginManager.install_slsteam_moon(
-                    progress_callback=lambda msg: None
-                )
+                ok = await task(on_log)
+                dialog.close()
                 self._update_tools_status()
-                if success:
-                    QMessageBox.information(self, "Success", "slsteam-moon installed successfully!\nPlease restart Steam.")
+                if ok:
+                    QMessageBox.information(self, "Success", success_msg)
                 else:
-                    QMessageBox.critical(self, "Error", "Failed to install slsteam-moon. Check console output.")
+                    QMessageBox.critical(self, "Error", "Operation failed - check the terminal output.")
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to install slsteam-moon: {e}")
+                dialog.close()
+                QMessageBox.critical(self, "Error", str(e))
 
         loop.create_task(_task())
+
+    def _install_slsteam_moon(self) -> None:
+        from src.services.plugin_manager import PluginManager
+
+        def _run(log):
+            return PluginManager.install_slsteam_moon(progress_callback=log)
+
+        self._run_tool_with_progress(
+            "Installing slsteam-moon...",
+            _run,
+            "slsteam-moon installed successfully!\nPlease restart Steam.",
+        )
 
     def _uninstall_slsteam_moon(self) -> None:
         reply = QMessageBox.question(
@@ -835,36 +862,27 @@ class SettingsDialog(QDialog):
             return
 
         from src.services.plugin_manager import PluginManager
-        loop = get_async_loop()
 
-        async def _task():
-            try:
-                await PluginManager.uninstall_slsteam_moon()
-                self._update_tools_status()
-                QMessageBox.information(self, "Success", "slsteam-moon has been removed.\nPlease restart Steam.")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to uninstall slsteam-moon: {e}")
+        def _run(log):
+            return PluginManager.uninstall_slsteam_moon()
 
-        loop.create_task(_task())
+        self._run_tool_with_progress(
+            "Uninstalling slsteam-moon...",
+            _run,
+            "slsteam-moon has been removed.\nPlease restart Steam.",
+        )
 
     def _install_lumen(self) -> None:
         from src.services.plugin_manager import PluginManager
-        loop = get_async_loop()
 
-        async def _task():
-            try:
-                success = await PluginManager.install_lumen(
-                    progress_callback=lambda msg: None
-                )
-                self._update_tools_status()
-                if success:
-                    QMessageBox.information(self, "Success", "Lumen installed successfully!\nNebula custom lua overlayed.")
-                else:
-                    QMessageBox.critical(self, "Error", "Failed to install Lumen. Check console output.")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to install Lumen: {e}")
+        def _run(log):
+            return PluginManager.install_lumen(progress_callback=log)
 
-        loop.create_task(_task())
+        self._run_tool_with_progress(
+            "Installing Lumen...",
+            _run,
+            "Lumen installed successfully!\nNebula custom lua overlayed.",
+        )
 
     def _uninstall_lumen(self) -> None:
         reply = QMessageBox.question(
@@ -877,17 +895,15 @@ class SettingsDialog(QDialog):
             return
 
         from src.services.plugin_manager import PluginManager
-        loop = get_async_loop()
 
-        async def _task():
-            try:
-                await PluginManager.uninstall_lumen()
-                self._update_tools_status()
-                QMessageBox.information(self, "Success", "Lumen has been removed.")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to uninstall Lumen: {e}")
+        def _run(log):
+            return PluginManager.uninstall_lumen()
 
-        loop.create_task(_task())
+        self._run_tool_with_progress(
+            "Uninstalling Lumen...",
+            _run,
+            "Lumen has been removed.",
+        )
     # =========================================================================
     def _on_test_sgdb_key(self) -> None:
         key = self.input_sgdb_key.text().strip()
