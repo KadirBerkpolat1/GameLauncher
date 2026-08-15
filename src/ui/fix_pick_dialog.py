@@ -1,6 +1,49 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QListWidget, QListWidgetItem,
-                                 QPushButton, QHBoxLayout, QTabWidget, QWidget, QScrollArea)
-from PySide6.QtCore import Qt
+                                 QPushButton, QHBoxLayout, QTabWidget, QWidget, QScrollArea,
+                                 QStyledItemDelegate, QStyle)
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QTextDocument
+
+class RichTextDelegate(QStyledItemDelegate):
+    """Renders item DisplayRole as rich text (QListWidget's default
+    delegate draws HTML literally)."""
+
+    def paint(self, painter, option, index):
+        html = index.data(Qt.ItemDataRole.DisplayRole)
+        if not html:
+            super().paint(painter, option, index)
+            return
+
+        painter.save()
+
+        # Selection / hover background from the style
+        style = option.widget.style() if option.widget else QApplication.style()
+        opt = option.__class__(option)
+        style.drawPrimitive(QStyle.PrimitiveElement.PE_PanelItemViewItem, opt, painter, option.widget)
+
+        doc = QTextDocument()
+        doc.setDocumentMargin(0)
+        doc.setDefaultFont(option.font)
+        doc.setHtml(html)
+        rect = option.rect.adjusted(8, 8, -8, -8)
+        painter.translate(rect.left(), rect.top())
+        clip = painter.clipRegion().boundingRect()
+        painter.setClipRect(rect)
+        doc.drawContents(painter)
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        html = index.data(Qt.ItemDataRole.DisplayRole)
+        if not html:
+            return super().sizeHint(option, index)
+        doc = QTextDocument()
+        doc.setDocumentMargin(0)
+        doc.setDefaultFont(option.font)
+        doc.setHtml(html)
+        # Approximate the list width so long titles wrap instead of eliding
+        w = max(option.rect.width() - 16, 300)
+        doc.setTextWidth(w)
+        return QSize(w + 16, int(doc.size().height()) + 16)
 
 class FixPickDialog(QDialog):
     def __init__(self, fixes: list, parent=None):
@@ -85,6 +128,7 @@ class FixPickDialog(QDialog):
             
             list_widget = QListWidget()
             list_widget.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+            list_widget.setItemDelegate(RichTextDelegate(list_widget))
             for fix in source_fixes:
                 item = self._create_fix_item(fix, source, info, list_widget)
                 list_widget.addItem(item)
@@ -111,6 +155,7 @@ class FixPickDialog(QDialog):
             
             list_widget = QListWidget()
             list_widget.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+            list_widget.setItemDelegate(RichTextDelegate(list_widget))
             for fix in goldberg_fixes:
                 # Use fallback info for display
                 item = self._create_fix_item(fix, "goldberg", fallback_info, list_widget)
@@ -170,12 +215,6 @@ class FixPickDialog(QDialog):
         item = QListWidgetItem()
         item.setData(Qt.ItemDataRole.UserRole, fix)
         item.setData(Qt.ItemDataRole.DisplayRole, html)
-
-        # Give rows room for two lines (title + badges); short titles
-        # stay single-line.
-        from PySide6.QtCore import QSize
-        item.setSizeHint(QSize(0, 48))
-
         list_widget.addItem(item)
         return item
 
