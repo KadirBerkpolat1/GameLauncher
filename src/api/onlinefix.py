@@ -38,8 +38,8 @@ HOSTERS_BASE = "https://hosters.online-fix.me:2053"
 SEARCH_URL = ONLINEFIX_BASE + "/index.php?do=search&subaction=search&story={query}"
 
 USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
 ARCHIVE_PASSWORD = "online-fix.me"
@@ -75,19 +75,17 @@ class OnlineFixBlockedError(OnlineFixError):
 
 class OnlineFixClient:
     """
-    Async client for the Online-Fix.Me download flow.
-
-    HubcapClient ile ayni deseni izler: lazy httpx client, acik hata tipleri.
+    Online-Fix.Me ile etkilesim icin client.
     """
 
-    def __init__(self) -> None:
+    def __init__(self):
         self._client: Optional[httpx.AsyncClient] = None
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(30.0, connect=10.0),
                 headers={"User-Agent": USER_AGENT},
-                timeout=30.0,
                 follow_redirects=True,
             )
         return self._client
@@ -140,17 +138,46 @@ class OnlineFixClient:
             hoster_match = _HOSTER_LINK_RE.search(html_content)
             hoster_url = hoster_match.group(1) if hoster_match else None
 
-            # Versiyon
+            # Versiyon - try multiple patterns
             version = "0.0.0"
             title_match = _GAME_TITLE_RE.search(html_content)
             if title_match:
-                version = extract_version(title_match.group(1))
+                title_clean = html.unescape(title_match.group(1))
+                # Try build number pattern first (dates like 24062026)
+                build_match = re.search(r'build\s*(\d{6,8})', title_clean, re.IGNORECASE)
+                if build_match:
+                    version = build_match.group(1)
+                else:
+                    # Fall back to standard version extraction
+                    from src.utils.fix_utils import extract_version
+                    version = extract_version(title_clean)
+
+            # Also check hoster page for build/version info
+            if version == "0.0.0" and hoster_url:
+                try:
+                    resp2 = await client.get(hoster_url, headers={"Referer": ONLINEFIX_BASE})
+                    resp2.raise_for_status()
+                    hoster_html = resp2.text
+                    
+                    # Try to find build/version on hoster page
+                    build_match = re.search(r'build\s*(\d{6,8})', hoster_html, re.IGNORECASE)
+                    if build_match:
+                        version = build_match.group(1)
+                    elif version == "0.0.0":
+                        # Also check file names for build numbers like 24062026
+                        file_build_match = re.search(r'build[._-]?(\d{6,8})', hoster_html, re.IGNORECASE)
+                        if file_build_match:
+                            version = file_build_match.group(1)
+                        else:
+                            from src.utils.fix_utils import extract_version
+                            version = extract_version(hoster_html)
+                except Exception:
+                    pass
 
             return {"hoster_link": hoster_url, "version": version}
         except Exception as e:
             logger.warning(f"Failed to parse game page {game_url}: {e}")
             return {"hoster_link": None, "version": "0.0.0"}
-
     # ------------------------------------------------------------------ #
     # 3. Hosters sayfasindan fix secimi
     # ------------------------------------------------------------------ #
@@ -188,6 +215,7 @@ class OnlineFixClient:
                             "file_size": link_data.get("size", link_data.get("id", 0)),
                         })
                         break  # only first good hoster per block
+
             # Sort by hoster priority
             priority_map = {h: i for i, h in enumerate(HOSTER_PRIORITY)}
             entries.sort(key=lambda e: priority_map.get(e["hoster"], 99))
@@ -209,7 +237,7 @@ class OnlineFixClient:
     # 4. Direct download link cozumu
     # ------------------------------------------------------------------ #
     async def resolve_direct(self, fix_entry: Dict) -> Tuple[str, Optional[Dict]]:
-        """Hoster URL'sini cozer: Pixeldrain/GoFile/FileDitch -> direct link."""
+        """Hoster URL'sini cozler: Pixeldrain/GoFile/FileDitch -> direct link."""
         url = fix_entry["url"]
         host = fix_entry["hoster"]
 
@@ -232,19 +260,27 @@ class OnlineFixClient:
                         return child["link"], None
             raise OnlineFixBlockedError("GoFile link could not be resolved")
         elif "fileditch" in host:
-            # FileDitch usually direct
+            # FileDitch direct link is already direct
             return url, None
+        elif "pixeldrain" in host and "/api/file/" not in url:
+            # Legacy pixeldrain format
+            file_id = url.rsplit("/", 1)[-1]
+            return f"https://pixeldrain.com/api/file/{file_id}", None
         else:
             raise OnlineFixBlockedError(f"Unsupported hoster: {host}")
 
-    async def download(self, direct_url: str, dest_path: str, cookies: Optional[Dict] = None) -> None:
-        """Downloads the fix archive to dest_path."""
+    async def download(self, url: str, dest_path: str, cookies: Optional[Dict] = None) -> None:
+        """Downloads a file from the given URL with optional cookies."""
         client = self._get_client()
-        async with client.stream("GET", direct_url, cookies=cookies, timeout=120.0) as resp:
-            resp.raise_for_status()
-            with open(dest_path, "wb") as f:
-                async for chunk in resp.aiter_bytes(8192):
-                    f.write(chunk)
+        try:
+            async with client.stream("GET", url, cookies=cookies, timeout=300.0) as resp:
+                resp.raise_for_status()
+                with open(dest_path, "wb") as f:
+                    async for chunk in resp.aiter_bytes(8192):
+                        f.write(chunk)
+        except Exception as e:
+            logger.warning(f"Download failed for {url}: {e}")
+            raise
 
 
 # Global instance for easy access across the application
