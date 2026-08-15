@@ -24,17 +24,14 @@ class RyuuFixProvider(FixProvider):
             fixes = []
             
             for raw in raw_fixes:
-                # Parse badges from Ryuu response
-                badges = []
-                if raw.get("online"):
-                    badges.append("Online")
-                if raw.get("bypass"):
-                    badges.append("Bypass")
-                
+                # Ryuu API returns a 'badges' list (e.g. ["Online"]),
+                # not separate 'online'/'bypass' fields.
+                badges = list(raw.get("badges", []))
+
                 fix = FixInfo(
                     source="ryuu",
                     title=raw.get("name", "Ryuu Fix"),
-                    version=raw.get("version", "1.0.0"),
+                    version=raw.get("size", raw.get("version", "1.0.0")),
                     url=raw.get("url", ""),
                     badges=badges,
                     metadata={

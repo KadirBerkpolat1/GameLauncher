@@ -106,16 +106,12 @@ class RyuuClient:
             item_name = re.sub(r'[\W_]+', '', item.get("name", "").lower())
             if item_name == search_query or search_query in item_name:
                 for fix in item.get("fixes", []):
-                    badges = fix.get("badges", [])
-                    badges_str = ", ".join(badges)
-                    title_suffix = f" [{badges_str}]" if badges else ""
-                    
                     fixes.append({
                         "source": "ryuu",
-                        "title": f"Ryuu Fix{title_suffix}",
+                        "title": "Ryuu Fix",
                         "version": fix.get("size", "0.0"),
                         "url": fix.get("href", ""),
-                        "badges": badges
+                        "badges": fix.get("badges", [])
                     })
         return fixes
     async def request_manifest(self, app_id: int) -> Dict[str, Any]:
