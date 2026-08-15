@@ -36,7 +36,6 @@ class OnlineFixProvider(FixProvider):
                     badges=["Online"],
                     metadata={
                         "hoster_link": page_info.get("hoster_link"),
-                        "entries": page_info.get("entries", []),
                     }
                 )
                 fixes.append(fix)
@@ -47,8 +46,6 @@ class OnlineFixProvider(FixProvider):
         except Exception as e:
             logger.warning(f"OnlineFix search failed for '{query}': {e}")
             return []
-    
-    async def download_fix(self, fix: FixInfo, dest_dir) -> str:
         """Download OnlineFix fix (requires hoster resolution)."""
         import tempfile
         from pathlib import Path
