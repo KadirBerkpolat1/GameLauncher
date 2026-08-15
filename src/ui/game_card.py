@@ -332,9 +332,13 @@ class GameCard(QFrame):
                 from src.services.download import DownloadManager
                 success = await DownloadManager.inject_lua_to_steam(self.app_id)
                 if success:
-                    self.btn_download.setText("✓ In Steam (Restart Reqd)")
+                    self.btn_download.setText("✓ In Steam")
                     self.btn_download.setStyleSheet("background-color: #059669; color: white;")
-                    QMessageBox.information(self, "Moon Engine", f"{self.title} injected to Steam.\nPlease click 'Restart Steam' to start downloading.")
+                    # Open Steam install dialog directly
+                    import subprocess
+                    subprocess.Popen(["xdg-open", f"steam://install/{self.app_id}"], start_new_session=True)
+                    QMessageBox.information(self, "Moon Engine", 
+                        f"{self.title} injected to Steam.\nSteam download dialog should open automatically.\nIf not, restart Steam and check Library.")
                 else:
                     raise Exception("Failed to inject Lua into Steam.")
             else:
@@ -346,7 +350,6 @@ class GameCard(QFrame):
             self.btn_download.setText("Error")
             self.btn_download.setEnabled(True)
             print(f"Error adding to library: {e}")
-
     def _request_download(self) -> None:
         from src.config.settings import SettingsManager
         mode = SettingsManager.get("steam_integration_mode", "classic")
