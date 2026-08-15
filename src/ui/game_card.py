@@ -117,7 +117,14 @@ class GameCard(QFrame):
         btn_container.setSpacing(6)
 
         if self.mode in ("search", "store"):
-            self.btn_download = QPushButton("➕  Add to Library")
+            from src.config.settings import SettingsManager
+            mode = SettingsManager.get("steam_integration_mode", "classic")
+            
+            if mode == "moon":
+                self.btn_download = QPushButton("➕ Add to Steam (Moon)")
+            else:
+                self.btn_download = QPushButton("➕ Add to Library")
+                
             self.btn_download.setProperty("cssClass", "PrimaryAction")
             self.btn_download.clicked.connect(self._add_to_library)
             btn_container.addWidget(self.btn_download)
@@ -125,28 +132,74 @@ class GameCard(QFrame):
         elif self.mode == "library":
             installed_path = getattr(self, '_installed_path', None)
 
-            self.btn_download = QPushButton("⬇  Download" if not installed_path else "⚡ Re-download")
-            self.btn_download.setProperty("cssClass", "PrimaryAction")
-            self.btn_download.clicked.connect(self._request_download)
-            btn_container.addWidget(self.btn_download)
-
-            sub_row = QHBoxLayout()
-            sub_row.setSpacing(6)
-
             if installed_path:
-                self.btn_apply_fix = QPushButton("🔧  Fix")
+                # Primary action: PLAY
+                self.btn_play = QPushButton("▶  Play")
+                self.btn_play.setProperty("cssClass", "PrimaryAction")
+                self.btn_play.setStyleSheet("""
+                    QPushButton {
+                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #059669, stop:1 #10B981);
+                        color: #FFFFFF;
+                        font-weight: 700;
+                        font-size: 13px;
+                        border-radius: 6px;
+                        padding: 7px;
+                    }
+                    QPushButton:hover {
+                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #34D399);
+                    }
+                """)
+                self.btn_play.clicked.connect(self._launch_game)
+                btn_container.addWidget(self.btn_play)
+
+                # Sub Row 1: Fix & Cloud
+                sub_row1 = QHBoxLayout()
+                sub_row1.setSpacing(4)
+
+                self.btn_apply_fix = QPushButton("🔧 Fix")
                 self.btn_apply_fix.setProperty("cssClass", "SecondaryAction")
                 self.btn_apply_fix.clicked.connect(self._apply_fix_auto)
-                sub_row.addWidget(self.btn_apply_fix)
+                sub_row1.addWidget(self.btn_apply_fix)
 
-            btn_text = "🗑  Uninstall" if installed_path else "✕  Delete"
-            self.btn_uninstall = QPushButton(btn_text)
-            self.btn_uninstall.setProperty("cssClass", "DangerAction")
-            self.btn_uninstall.clicked.connect(self._uninstall_game)
-            sub_row.addWidget(self.btn_uninstall)
+                self.btn_cloud = QPushButton("☁ Cloud")
+                self.btn_cloud.setProperty("cssClass", "SecondaryAction")
+                self.btn_cloud.clicked.connect(self._toggle_cloud_save)
+                self._update_cloud_btn_style()
+                sub_row1.addWidget(self.btn_cloud)
+                btn_container.addLayout(sub_row1)
 
-            btn_container.addLayout(sub_row)
+                # Sub Row 2: Re-dl & Uninstall
+                sub_row2 = QHBoxLayout()
+                sub_row2.setSpacing(4)
 
+                from src.config.settings import SettingsManager
+                mode = SettingsManager.get("steam_integration_mode", "classic")
+                if mode != "moon":
+                    self.btn_download = QPushButton("⚡ Re-dl")
+                    self.btn_download.setProperty("cssClass", "SecondaryAction")
+                    self.btn_download.clicked.connect(self._request_download)
+                    sub_row2.addWidget(self.btn_download)
+
+                self.btn_uninstall = QPushButton("🗑 Delete")
+                self.btn_uninstall.setProperty("cssClass", "DangerAction")
+                self.btn_uninstall.clicked.connect(self._uninstall_game)
+                sub_row2.addWidget(self.btn_uninstall)
+                btn_container.addLayout(sub_row2)
+            else:
+                from src.config.settings import SettingsManager
+                mode = SettingsManager.get("steam_integration_mode", "classic")
+                if mode == "moon":
+                    self.btn_download = QPushButton("➕ Add to Steam (Moon)")
+                else:
+                    self.btn_download = QPushButton("⬇  Download")
+                self.btn_download.setProperty("cssClass", "PrimaryAction")
+                self.btn_download.clicked.connect(self._request_download)
+                btn_container.addWidget(self.btn_download)
+
+                self.btn_uninstall = QPushButton("✕  Remove from list")
+                self.btn_uninstall.setProperty("cssClass", "DangerAction")
+                self.btn_uninstall.clicked.connect(self._uninstall_game)
+                btn_container.addWidget(self.btn_uninstall)
         layout.addLayout(btn_container)
 
         # Network Manager for Image Loading
@@ -265,24 +318,42 @@ class GameCard(QFrame):
     # ACTIONS: LIBRARY & FIX PATCHING
     # =========================================================================
     def _add_to_library(self) -> None:
-        self.btn_download.setText("Adding...")
+        self.btn_download.setText("Processing...")
         self.btn_download.setEnabled(False)
         loop = get_async_loop()
         loop.create_task(self._async_add_to_library())
 
     async def _async_add_to_library(self) -> None:
         try:
-            from src.services.download import DownloadManager
-            await DownloadManager.prepare_game_data(self.app_id, scope="full")
-            self.btn_download.setText("✓ In Library")
-            self.btn_download.setStyleSheet("background-color: #059669; color: white;")
+            from src.config.settings import SettingsManager
+            mode = SettingsManager.get("steam_integration_mode", "classic")
+            
+            if mode == "moon":
+                from src.services.download import DownloadManager
+                success = await DownloadManager.inject_lua_to_steam(self.app_id)
+                if success:
+                    self.btn_download.setText("✓ In Steam (Restart Reqd)")
+                    self.btn_download.setStyleSheet("background-color: #059669; color: white;")
+                    QMessageBox.information(self, "Moon Engine", f"{self.title} injected to Steam.\nPlease click 'Restart Steam' to start downloading.")
+                else:
+                    raise Exception("Failed to inject Lua into Steam.")
+            else:
+                from src.services.download import DownloadManager
+                await DownloadManager.prepare_game_data(self.app_id, scope="full")
+                self.btn_download.setText("✓ In Library")
+                self.btn_download.setStyleSheet("background-color: #059669; color: white;")
         except Exception as e:
             self.btn_download.setText("Error")
             self.btn_download.setEnabled(True)
             print(f"Error adding to library: {e}")
 
     def _request_download(self) -> None:
-        self.download_requested.emit(self.app_id, self.title)
+        from src.config.settings import SettingsManager
+        mode = SettingsManager.get("steam_integration_mode", "classic")
+        if mode == "moon":
+            self._add_to_library()
+        else:
+            self.download_requested.emit(self.app_id, self.title)
 
     def _apply_fix_auto(self) -> None:
         target_path = getattr(self, '_installed_path', None)
@@ -296,15 +367,7 @@ class GameCard(QFrame):
 
         self._fix_target_path = target_path
         self.btn_apply_fix.setEnabled(False)
-        self.btn_apply_fix.setText("Closing Steam...")
-
-        res = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
-        if res.returncode == 0:
-            subprocess.run(["steam", "-shutdown"], check=False)
-            QTimer.singleShot(4000, self._start_fix_download)
-        else:
-            self._start_fix_download()
-
+        self._start_fix_download()
     def _start_fix_download(self) -> None:
         self.btn_apply_fix.setText("Fetching...")
         get_async_loop().create_task(self._async_fetch_and_apply_fix())
@@ -345,6 +408,16 @@ class GameCard(QFrame):
             if source == "goldberg":
                 from src.services.drm_manager import DRMManager
                 DRMManager.apply_goldberg(str(self.app_id), target_path)
+            elif source == "ryuu":
+                url = best_fix["url"]
+                import httpx
+                dest = Path(tempfile.gettempdir()) / f"ryuu_{self.app_id}_fix.zip"
+                async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
+                    resp = await client.get(url)
+                    resp.raise_for_status()
+                    dest.write_bytes(resp.content)
+                from src.utils.onlinefix_patcher import OnlineFixPatcher
+                OnlineFixPatcher.apply_patch_from_archive(str(dest), str(self.app_id), target_path, password="")
             elif source == "onlinefix":
                 game_url = best_fix["url"]
                 page = await onlinefix_api.get_game_page(game_url)
@@ -370,9 +443,10 @@ class GameCard(QFrame):
                 else:
                     OnlineFixPatcher.apply_patch(str(self.app_id), target_path)
 
-            subprocess.Popen(["steam"], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            QMessageBox.information(self, "Success", f"Fix ({source}) applied and Steam restarted!")
-
+            QMessageBox.information(
+                self, "Success",
+                f"Fix ({source}) applied successfully!\nClick 'Restart Steam' on the sidebar when you want to reload changes."
+            )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to apply fix: {e}")
         finally:
@@ -397,3 +471,91 @@ class GameCard(QFrame):
             self.uninstalled.emit(self.app_id)
         else:
             QMessageBox.warning(self, "Error", f"Failed to uninstall: {error}")
+    def _launch_game(self) -> None:
+        """Launches the game via Steam protocol."""
+        import shutil
+        steam_cmd = "steam"
+        try:
+            subprocess.Popen(["xdg-open", f"steam://rungameid/{self.app_id}"], start_new_session=True)
+        except Exception as e:
+            try:
+                subprocess.Popen([steam_cmd, f"steam://rungameid/{self.app_id}"], start_new_session=True)
+            except Exception as err:
+                QMessageBox.warning(self, "Launch Error", f"Failed to launch game: {err}")
+
+    def _is_cloud_enabled_for_game(self) -> bool:
+        """Checks if CloudRedirect LD_PRELOAD is active for this game."""
+        from src.utils.paths import get_steam_path
+        from src.utils.vdf_parser import LocalConfigManager
+        from src.services.cloud_redirect import CR_SO_PATH
+        steam_path = get_steam_path()
+        if not steam_path:
+            return False
+        manager = LocalConfigManager(steam_path)
+        opts = manager.get_launch_options(str(self.app_id)) or ""
+        return str(CR_SO_PATH.name) in opts or "cloud_redirect.so" in opts
+
+    def _update_cloud_btn_style(self) -> None:
+        """Updates the Cloud button appearance based on its hook status."""
+        if not hasattr(self, 'btn_cloud'):
+            return
+        is_active = self._is_cloud_enabled_for_game()
+        if is_active:
+            self.btn_cloud.setText("☁ Cloud: ON")
+            self.btn_cloud.setStyleSheet("""
+                QPushButton {
+                    background-color: rgba(16, 185, 129, 0.2);
+                    color: #10B981;
+                    border: 1px solid #10B981;
+                    font-weight: 700;
+                    font-size: 11px;
+                    border-radius: 6px;
+                    padding: 5px;
+                }
+            """)
+        else:
+            self.btn_cloud.setText("☁ Cloud: OFF")
+            self.btn_cloud.setStyleSheet("""
+                QPushButton {
+                    background-color: #1A1F30;
+                    color: #94A3B8;
+                    border: 1px solid #283252;
+                    font-size: 11px;
+                    border-radius: 6px;
+                    padding: 5px;
+                }
+            """)
+
+    def _toggle_cloud_save(self) -> None:
+        """Toggles CloudRedirect hook for this game."""
+        from src.services.cloud_redirect import CloudRedirectManager
+        if not CloudRedirectManager.is_installed():
+            reply = QMessageBox.question(
+                self, "CloudRedirect Hook Missing",
+                "CloudRedirect hook is not installed yet. Would you like to install it now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                get_async_loop().create_task(self._async_install_and_enable_cloud())
+            return
+
+        is_active = self._is_cloud_enabled_for_game()
+        if is_active:
+            CloudRedirectManager.remove_game_hook(self.app_id)
+            QMessageBox.information(self, "Cloud Saves", f"Cloud save redirection disabled for {self.title}.")
+        else:
+            CloudRedirectManager.apply_game_hook(self.app_id)
+            QMessageBox.information(self, "Cloud Saves", f"Cloud save redirection enabled for {self.title}!\nSaves will sync to your configured provider.")
+
+        self._update_cloud_btn_style()
+
+    async def _async_install_and_enable_cloud(self) -> None:
+        from src.services.cloud_redirect import CloudRedirectManager
+        try:
+            await CloudRedirectManager.ensure_installed()
+            CloudRedirectManager.apply_game_hook(self.app_id)
+            self._update_cloud_btn_style()
+            QMessageBox.information(self, "Success", f"CloudRedirect installed and enabled for {self.title}!")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to setup CloudRedirect: {e}")

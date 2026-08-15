@@ -91,8 +91,21 @@ class SLSsteamConfigManager:
         if not self.config_data.get("AdditionalApps"):
             self.config_data["AdditionalApps"] = []
         if app_id not in self.config_data["AdditionalApps"]:
-            self.config_data["AdditionalApps"].append(app_id)
+            self.config_data["AdditionalApps"].append(int(app_id))
             self.save()
+
+    def remove_additional_app(self, app_id: int) -> None:
+        if self.config_data.get("AdditionalApps") and int(app_id) in self.config_data["AdditionalApps"]:
+            self.config_data["AdditionalApps"].remove(int(app_id))
+            self.save()
+
+    def set_disable_cloud(self, disabled: bool) -> None:
+        """Configures DisableCloud (set to False for CloudRedirect)."""
+        self.config_data["DisableCloud"] = bool(disabled)
+        self.save()
+
+    def is_cloud_disabled(self) -> bool:
+        return self.config_data.get("DisableCloud", True)
 
     def set_manifest_id(self, depot_id: int, manifest_id: int) -> None:
         if not self.config_data.get("ManifestIds"):

@@ -170,6 +170,36 @@ class SettingsDialog(QDialog):
         hubcap_layout.addWidget(self.lbl_hubcap_status)
         layout.addWidget(group_hubcap)
 
+        # Ryuu Manifest API Group
+        group_ryuu = QGroupBox("Ryuu Manifest API (Direct .lua Generator)")
+        ryuu_layout = QVBoxLayout(group_ryuu)
+        ryuu_layout.setSpacing(10)
+
+        self.input_ryuu_key = QLineEdit()
+        self.input_ryuu_key.setPlaceholderText("Paste your Ryuu API key (generator.ryuu.lol)...")
+        self.input_ryuu_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.input_ryuu_key.setText(SettingsManager.get("ryuu_api_key", ""))
+        ryuu_layout.addWidget(self.input_ryuu_key)
+
+        # Manifest Provider Selector
+        provider_row = QHBoxLayout()
+        p_lbl = QLabel("Preferred Manifest Provider:")
+        p_lbl.setStyleSheet("color: #94A3B8; font-weight: 600;")
+        self.combo_manifest_provider = QComboBox()
+        self.combo_manifest_provider.addItems(["Auto (Hubcap + Ryuu Fallback)", "Hubcap Only", "Ryuu Only"])
+        cur_p = SettingsManager.get("manifest_provider", "auto")
+        if cur_p == "hubcap":
+            self.combo_manifest_provider.setCurrentIndex(1)
+        elif cur_p == "ryuu":
+            self.combo_manifest_provider.setCurrentIndex(2)
+        else:
+            self.combo_manifest_provider.setCurrentIndex(0)
+
+        provider_row.addWidget(p_lbl)
+        provider_row.addWidget(self.combo_manifest_provider)
+        provider_row.addStretch()
+        ryuu_layout.addLayout(provider_row)
+        layout.addWidget(group_ryuu)
         # Hubcap Account & Quota Status Card
         self.card_account = QFrame()
         self.card_account.setObjectName("SurfaceCard")
@@ -384,41 +414,63 @@ class SettingsDialog(QDialog):
         self.input_steam_path.setText(current_path)
 
         path_btn_row = QHBoxLayout()
-        btn_browse = QPushButton("📁   Browse")
-        btn_browse.setProperty("cssClass", "SecondaryAction")
-        btn_browse.clicked.connect(self._browse_steam_path)
-
-        btn_autodetect = QPushButton("🔍   Auto Detect")
-        btn_autodetect.setProperty("cssClass", "SecondaryAction")
-        btn_autodetect.clicked.connect(self._autodetect_steam_path)
-
-        path_btn_row.addWidget(btn_browse)
-        path_btn_row.addWidget(btn_autodetect)
+        self.btn_browse_steam = QPushButton("Browse...")
+        self.btn_browse_steam.setProperty("cssClass", "SecondaryAction")
+        self.btn_browse_steam.clicked.connect(self._browse_steam_path)
+        path_btn_row.addWidget(self.btn_browse_steam)
         path_btn_row.addStretch()
+
+        # Steam Library Selector
+        lib_row = QHBoxLayout()
+        lib_lbl = QLabel("Default Install Library:")
+        lib_lbl.setStyleSheet("color: #94A3B8; font-weight: 600;")
+        self.combo_steam_lib = QComboBox()
+        from src.utils.paths import get_steam_libraries
+        available_libs = get_steam_libraries()
+        if not available_libs:
+            available_libs = [current_path] if current_path else []
+        self.combo_steam_lib.addItems(available_libs)
+        pref_lib = SettingsManager.get("preferred_steam_library", "")
+        if pref_lib in available_libs:
+            self.combo_steam_lib.setCurrentText(pref_lib)
+
+        lib_row.addWidget(lib_lbl)
+        lib_row.addWidget(self.combo_steam_lib)
+        lib_row.addStretch()
 
         path_layout.addWidget(self.input_steam_path)
         path_layout.addLayout(path_btn_row)
+        path_layout.addLayout(lib_row)
         layout.addWidget(group_path)
 
-        # Download Engine Info Card
-        engine_card = QFrame()
-        engine_card.setObjectName("SurfaceCard")
-        engine_card_layout = QVBoxLayout(engine_card)
-        engine_card_layout.setSpacing(8)
+        # Steam Integration Mode (Classic vs Moon)
+        group_mode = QGroupBox("Steam Integration Mode")
+        mode_layout = QVBoxLayout(group_mode)
+        mode_layout.setSpacing(10)
 
-        engine_title = QLabel("⚡   Download Engine: DepotDownloaderMod (Active)")
-        engine_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #FFFFFF;")
+        self.radio_classic = QRadioButton("Classic Mode (DepotDownloaderMod)")
+        self.radio_classic.setToolTip("Downloads games safely and independently via DepotDownloader. Uses stable Headcrab SLSsteam.")
+        self.radio_moon = QRadioButton("Native Steam Mode (slsteam-moon)")
+        self.radio_moon.setToolTip("Steam itself downloads games natively. Requires slsteam-moon and can break with Steam updates.")
+
+        cur_mode = SettingsManager.get("steam_integration_mode", "classic")
+        if cur_mode == "moon":
+            self.radio_moon.setChecked(True)
+        else:
+            self.radio_classic.setChecked(True)
+
+        mode_layout.addWidget(self.radio_classic)
+        mode_layout.addWidget(self.radio_moon)
         
-        engine_desc = QLabel(
-            "Game Launcher uses a standalone Linux-x64 build of DepotDownloaderMod. "
-            "It downloads manifests and game files directly at maximum network speed without needing external dependencies."
+        mode_desc = QLabel(
+            "<b>Classic Mode</b> ensures stable independent downloads. <b>Native Mode</b> lets Steam handle downloads "
+            "but is highly experimental and breaks on Steam updates."
         )
-        engine_desc.setStyleSheet("color: #94A3B8; font-size: 12px; line-height: 1.4;")
-        engine_desc.setWordWrap(True)
+        mode_desc.setStyleSheet("color: #94A3B8; font-size: 11px;")
+        mode_desc.setWordWrap(True)
+        mode_layout.addWidget(mode_desc)
 
-        engine_card_layout.addWidget(engine_title)
-        engine_card_layout.addWidget(engine_desc)
-        layout.addWidget(engine_card)
+        layout.addWidget(group_mode)
 
         layout.addStretch()
 
@@ -628,14 +680,24 @@ class SettingsDialog(QDialog):
     # =========================================================================
     def _save_settings(self) -> None:
         SettingsManager.set("hubcap_api_key", self.input_hubcap_key.text().strip())
+        SettingsManager.set("ryuu_api_key", self.input_ryuu_key.text().strip())
+        
+        p_idx = self.combo_manifest_provider.currentIndex()
+        p_val = "auto" if p_idx == 0 else ("hubcap" if p_idx == 1 else "ryuu")
+        SettingsManager.set("manifest_provider", p_val)
+
         SettingsManager.set("steamgriddb_api_key", self.input_sgdb_key.text().strip())
         
         steam_p = self.input_steam_path.text().strip()
         if steam_p:
             SettingsManager.set("steam_path", steam_p)
 
-        SettingsManager.set("download_method", "ddmod")
+        pref_lib = self.combo_steam_lib.currentText().strip()
+        if pref_lib:
+            SettingsManager.set("preferred_steam_library", pref_lib)
 
-        SettingsManager.save()
+        new_mode = "moon" if self.radio_moon.isChecked() else "classic"
+        SettingsManager.set("steam_integration_mode", new_mode)
+        SettingsManager.set("download_method", "ddmod")
         hubcap_api.clear_cache()
         self.accept()

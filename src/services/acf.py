@@ -1,17 +1,24 @@
 import logging
 import os
 import re
+import subprocess
 import sys
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+def is_steam_running() -> bool:
+    """Checks if Steam process is currently active."""
+    try:
+        res = subprocess.run(["pgrep", "-x", "steam"], capture_output=True, text=True)
+        return res.returncode == 0
+    except Exception:
+        return False
 
 def _safe_folder_name(game_name: str, app_id: str) -> str:
     safe = re.sub(r"[^\w\s-]", "", game_name or "").strip().replace(" ", "_")
     if not safe:
         safe = f"App_{app_id}"
-    return safe
-
 
 def create_appmanifest(steamapps_dir, game_data: dict, size_on_disk: int = 0) -> str:
     """
@@ -106,16 +113,23 @@ def create_appmanifest(steamapps_dir, game_data: dict, size_on_disk: int = 0) ->
         f'\t"buildid"\t\t"{buildid}"\n'
         f'{installed_depots_str}\n'
         f'{platform_config}\n'
-        f'}}'
+        f'}}\n'
     )
-
     acf_path = os.path.join(steamapps_dir, f"appmanifest_{app_id}.acf")
+    tmp_path = acf_path + ".tmp"
+
     try:
-        with open(acf_path, "w", encoding="utf-8") as f:
+        with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(acf_content)
-        logger.info(f"Created appmanifest at {acf_path}")
-    except OSError as e:
-        logger.error(f"Failed to write appmanifest {acf_path}: {e}")
+        os.replace(tmp_path, acf_path)
+        logger.info(f"Wrote appmanifest: {acf_path}")
+    except Exception as e:
+        logger.error(f"Failed to write appmanifest: {e}")
+        if os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
         return ""
 
     return acf_path

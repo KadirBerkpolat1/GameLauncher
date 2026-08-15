@@ -97,9 +97,13 @@ class OnlineFixPatcher:
         # Her iki taraf da rar/zip şifresi için benzer bayraklar kullanır.
         tmp = tempfile.mkdtemp(prefix="ofme_fix_")
         if extractor == "bsdtar":
-            cmd = [extractor, "-xf", rar_path, "-C", tmp, "--passphrase", password]
+            cmd = [extractor, "-xf", rar_path, "-C", tmp]
+            if password:
+                cmd.extend(["--passphrase", password])
         else:
-            cmd = [extractor, "x", f"-p{password}", "-y", f"-o{tmp}", rar_path]
+            cmd = [extractor, "x", "-y", f"-o{tmp}", rar_path]
+            if password:
+                cmd.insert(2, f"-p{password}")
 
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode not in (0, 1):  # 7z: 1 = uyarılı başarı

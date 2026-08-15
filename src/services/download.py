@@ -201,13 +201,15 @@ class DownloadManager:
 
     @staticmethod
     async def _get_manifest_zip_cached(app_id: int) -> bytes:
-        """Fetches the manifest ZIP, caching it on disk so re-installs of a
+        """Fetches the manifest ZIP from Hubcap or Ryuu, caching it on disk so re-installs of a
         game (e.g. adding DLC later) reuse it without spending another credit.
 
         The ZIP is tiny (~50 KB); a TTL guards against stale manifests.
         """
         from datetime import datetime
         from src.api.hubcap import hubcap_api
+        from src.api.ryuu import ryuu_api
+        from src.config.settings import SettingsManager
 
         cache_dir = Path.home() / ".cache" / "GameLauncher" / "manifests"
         cache_file = cache_dir / f"{app_id}.zip"
@@ -221,14 +223,32 @@ class DownloadManager:
         except OSError:
             pass
 
-        zip_bytes = await hubcap_api.get_app_manifest_zip(app_id)
+        provider = SettingsManager.get("manifest_provider", "auto")
+        zip_bytes = None
+
+        if provider == "ryuu":
+            try:
+                zip_bytes = await ryuu_api.download_manifest(app_id, file_type="zip")
+            except Exception as e:
+                logger.warning(f"Ryuu manifest download failed: {e}. Falling back to Hubcap...")
+                zip_bytes = await hubcap_api.get_app_manifest_zip(app_id)
+        else:
+            try:
+                zip_bytes = await hubcap_api.get_app_manifest_zip(app_id)
+            except Exception as e:
+                logger.warning(f"Hubcap manifest download failed: {e}. Trying Ryuu fallback...")
+                try:
+                    zip_bytes = await ryuu_api.download_manifest(app_id, file_type="zip")
+                except Exception as ryuu_err:
+                    logger.error(f"Both Hubcap and Ryuu failed for app {app_id}: {ryuu_err}")
+                    raise e
+
         try:
             cache_dir.mkdir(parents=True, exist_ok=True)
             cache_file.write_bytes(zip_bytes)
         except OSError:
             pass
         return zip_bytes
-
     @staticmethod
     async def prepare_game_data(app_id: int, scope: str = "full") -> dict:
         """
@@ -287,6 +307,39 @@ class DownloadManager:
             parsed["installdir"] = info["installdir"]
 
         return game_data
+
+    @staticmethod
+    async def inject_lua_to_steam(app_id: int) -> bool:
+        """
+        Native Steam (Moon) Mode: Fetches the manifest ZIP, extracts the .lua,
+        and places it directly into ~/.steam/steam/config/stplug-in/
+        Steam itself will read this file and handle the download natively.
+        """
+        from src.utils.paths import get_steam_path
+        
+        steam_path = get_steam_path()
+        if not steam_path:
+            logger.error("Steam path not found. Cannot inject lua.")
+            return False
+            
+        plugin_dir = steam_path / "config" / "stplug-in"
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        
+        zip_bytes = await DownloadManager._get_manifest_zip_cached(app_id)
+        lua_content, _manifest_map, _manifest_dir = DownloadManager.process_zip_bytes(zip_bytes)
+        
+        if not lua_content:
+            logger.error(f"No valid lua content found for {app_id}")
+            return False
+            
+        lua_file = plugin_dir / f"{app_id}.lua"
+        try:
+            lua_file.write_text(lua_content, encoding="utf-8")
+            logger.info(f"Injected lua manifest to {lua_file}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to write lua manifest: {e}")
+            return False
 
     @staticmethod
     def install_local_zip(file_path: str) -> None:

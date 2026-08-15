@@ -41,8 +41,18 @@ class DownloadTask:
         libraries = get_steam_libraries()
 
         if libraries and installdir:
-            library = libraries[0]
-            self.steamapps_dir = os.path.join(library, "steamapps")
+            target_lib = self.game_data.get("target_library")
+            preferred_lib = SettingsManager.get("preferred_steam_library", "")
+
+            chosen_library = None
+            if target_lib and target_lib in libraries:
+                chosen_library = target_lib
+            elif preferred_lib and preferred_lib in libraries:
+                chosen_library = preferred_lib
+            else:
+                chosen_library = libraries[0]
+
+            self.steamapps_dir = os.path.join(chosen_library, "steamapps")
             target = os.path.join(
                 self.steamapps_dir, "common", installdir
             )
@@ -55,7 +65,6 @@ class DownloadTask:
             "downloads_folder", str(Path.home() / "Downloads")
         )
         return downloads_folder or str(Path.home() / "Downloads")
-
     async def _supports_mod_flags(self, ddmod_path: Path) -> bool:
         """Detects whether the binary supports -depotkeys/-manifestfile (modded fork)."""
         cache_key = str(ddmod_path)
@@ -142,8 +151,9 @@ class DownloadTask:
                 "Downloads'tan Steam yolunu ayarlayın."
             )
         if progress_callback:
+            provider = SettingsManager.get("manifest_provider", "auto").upper()
+            progress_callback(f"🚀 İndirme Başlatılıyor: {self.title} (AppID: {self.app_id}) [Engine: {provider}]")
             progress_callback(f"--- Hedef dizin: {self.download_dir} ---")
-
         manifest_dir = self.game_data.get("manifest_dir") or ""
         manifests = self.game_data.get("manifests", {}) or {}
 
@@ -262,7 +272,7 @@ class DownloadTask:
                     return
 
             if complete_callback and not self.is_canceled:
-                self._post_download_steps()
+                await self._post_download_steps_async()
                 complete_callback()
         finally:
             if keys_file_path:
@@ -298,8 +308,8 @@ class DownloadTask:
             return f"{line}  ({st['ema']:.1f} MB/s)"
         return line
 
-    def _post_download_steps(self):
-        """Wires the downloaded files into Steam: ACF, depotcache, SLSsteam config."""
+    async def _post_download_steps_async(self):
+        """Wires the downloaded files into Steam: ACF, depotcache, SLSsteam config. Also Auto-Applies Ryuu fixes."""
         from src.services.acf import create_appmanifest
         from src.config.slssteam import SLSsteamConfigManager
         from src.utils.paths import get_steam_path
@@ -337,6 +347,31 @@ class DownloadTask:
 
         # Executable permissions for Linux binaries.
         self._set_linux_binary_permissions()
+
+        # Auto-apply Ryuu fix if applicable
+        try:
+            provider = SettingsManager.get("manifest_provider", "auto")
+            if provider in ("auto", "ryuu") and self.download_dir:
+                from src.api.ryuu import ryuu_api
+                from src.utils.onlinefix_patcher import OnlineFixPatcher
+                import httpx
+                
+                logger.info(f"Checking for auto-fix from Ryuu for {self.title}...")
+                fixes = await ryuu_api.get_available_fixes(self.title)
+                if fixes:
+                    # Just grab the best/first fix from Ryuu
+                    best_fix = fixes[0]
+                    url = best_fix["url"]
+                    logger.info(f"Auto-applying Ryuu fix from {url}...")
+                    dest = Path(tempfile.gettempdir()) / f"ryuu_autofix_{self.app_id}.zip"
+                    async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
+                        resp = await client.get(url)
+                        if resp.status_code == 200:
+                            dest.write_bytes(resp.content)
+                            OnlineFixPatcher.apply_patch_from_archive(str(dest), str(self.app_id), str(self.download_dir), password="")
+                            logger.info(f"Successfully auto-applied Ryuu fix for {self.title}.")
+        except Exception as e:
+            logger.error(f"Failed to auto-apply Ryuu fix: {e}")
 
 
     def _set_linux_binary_permissions(self):

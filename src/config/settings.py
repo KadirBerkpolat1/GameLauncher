@@ -8,8 +8,11 @@ SETTINGS_FILE = SETTINGS_DIR / "settings.json"
 
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "hubcap_api_key": "",
+    "ryuu_api_key": "",
+    "manifest_provider": "auto",
     "steamgriddb_api_key": "",
     "steam_path": "",
+    "preferred_steam_library": "",
     "slssteam_config_path": str(Path.home() / ".config" / "SLSsteam" / "config.yaml"),
     "download_method": "ddmod",
     "depotdownloadermod_path": "",
@@ -21,6 +24,12 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "auto_upload_keys": True,
     "download_history": [],
     "theme": "dark",
+    "steam_integration_mode": "classic",
+    "lua_modding_mode": False,
+    "cloud_redirect_enabled": False,
+    "cloud_redirect_provider": "local",
+    "cloud_redirect_path": str(Path.home() / ".local" / "share" / "CloudRedirect" / "saves"),
+    "auto_restart_steam": True,
     "profiles": {
         "default": {
             "name": "Varsayılan",

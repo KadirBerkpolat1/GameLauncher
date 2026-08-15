@@ -1,8 +1,17 @@
 import os
 import shutil
 import logging
+import tempfile
+import zipfile
+import tarfile
 from pathlib import Path
 from typing import List, Set
+import httpx
+
+logger = logging.getLogger(__name__)
+
+GOLDBERG_URL = "https://gitlab.com/Mr_Goldberg/goldberg_emulator/-/jobs/artifacts/master/download?job=build"
+GOLDBERG_FALLBACK_URL = "https://raw.githubusercontent.com/FaultyPacketOverflowVector/Accela/main/deps/Goldberg.tar.gz"
 
 class DRMManager:
     """Manages DRM removal using Goldberg Emulator."""
@@ -12,20 +21,86 @@ class DRMManager:
         """Ensures Goldberg binaries exist and returns their path."""
         root_dir = Path(__file__).resolve().parent.parent.parent
         assets_dir = root_dir / "assets" / "goldberg"
-        
-        if not assets_dir.exists():
-            # Try to copy from ACCELA's bundle if available
-            accela_gb = Path.home() / ".local/share/ACCELA/squashfs-root/deps/Goldberg"
-            if accela_gb.exists():
-                assets_dir.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copytree(accela_gb, assets_dir)
-            else:
-                raise FileNotFoundError(
-                    "Goldberg Emulator dosyaları bulunamadı!\n"
-                    f"Lütfen '{assets_dir}' dizinine Goldberg dosyalarını ekleyin."
-                )
-        return assets_dir
+        user_dir = Path.home() / ".local" / "share" / "GameLauncher" / "goldberg"
 
+        for target_path in (assets_dir, user_dir):
+            if (target_path / "windows" / "steam_api64.dll").exists() or (target_path / "steam_api64.dll").exists():
+                return target_path
+        
+        # Try to copy from ACCELA's bundle if available
+        accela_gb = Path.home() / ".local/share/ACCELA/squashfs-root/deps/Goldberg"
+        if accela_gb.exists():
+            try:
+                assets_dir.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(accela_gb, assets_dir, dirs_exist_ok=True)
+                return assets_dir
+            except Exception:
+                pass
+
+        # Download Goldberg automatically
+        download_target = assets_dir
+        try:
+            assets_dir.parent.mkdir(parents=True, exist_ok=True)
+            assets_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            download_target = user_dir
+            download_target.mkdir(parents=True, exist_ok=True)
+
+        DRMManager._download_goldberg(download_target)
+        return download_target
+
+    @staticmethod
+    def _download_goldberg(target_dir: Path) -> None:
+        """Downloads and extracts Goldberg Emulator binaries to target_dir."""
+        logger.info(f"Downloading Goldberg Emulator to {target_dir}...")
+        windows_dir = target_dir / "windows"
+        linux_dir = target_dir / "linux"
+        windows_dir.mkdir(parents=True, exist_ok=True)
+        linux_dir.mkdir(parents=True, exist_ok=True)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            archive_path = Path(tmp_dir) / "goldberg.zip"
+            downloaded = False
+
+            for url in (GOLDBERG_URL, GOLDBERG_FALLBACK_URL):
+                try:
+                    with httpx.Client(follow_redirects=True, timeout=30.0) as client:
+                        resp = client.get(url)
+                        if resp.status_code == 200:
+                            archive_path.write_bytes(resp.content)
+                            downloaded = True
+                            break
+                except Exception as e:
+                    logger.warning(f"Failed to fetch Goldberg from {url}: {e}")
+
+            if not downloaded or not archive_path.exists():
+                raise FileNotFoundError(
+                    "Goldberg Emulator otomatik olarak indirilemedi. Lütfen internet bağlantınızı kontrol edin."
+                )
+
+            try:
+                if zipfile.is_zipfile(archive_path):
+                    with zipfile.ZipFile(archive_path, "r") as z:
+                        z.extractall(tmp_dir)
+                elif tarfile.is_tarfile(archive_path):
+                    with tarfile.open(archive_path, "r:*") as t:
+                        t.extractall(tmp_dir)
+            except Exception as e:
+                raise RuntimeError(f"Goldberg arşivi açılamadı: {e}")
+
+            # Search for steam_api binaries in extracted directory and copy them
+            for root, _, files in os.walk(tmp_dir):
+                for f in files:
+                    f_lower = f.lower()
+                    src_file = Path(root) / f
+                    if f_lower == "steam_api.dll":
+                        shutil.copy2(src_file, windows_dir / "steam_api.dll")
+                    elif f_lower == "steam_api64.dll":
+                        shutil.copy2(src_file, windows_dir / "steam_api64.dll")
+                    elif f_lower == "libsteam_api.so":
+                        shutil.copy2(src_file, linux_dir / "libsteam_api.so")
+                    elif f_lower == "libsteam_api64.so":
+                        shutil.copy2(src_file, linux_dir / "libsteam_api64.so")
     @staticmethod
     def apply_goldberg(app_id: str, game_dir: str):
         """Applies Goldberg emulator to the game directory."""

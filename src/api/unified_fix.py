@@ -4,7 +4,7 @@ from pathlib import Path
 
 from src.api.onlinefix import onlinefix_api
 from src.api.freetp import freetp_api
-
+from src.api.ryuu import ryuu_api
 def parse_version(v: str) -> tuple:
     """Parses a version string into a tuple of ints/strings for comparison."""
     import re
@@ -21,7 +21,7 @@ class UnifiedFixFetcher:
     @staticmethod
     async def get_available_fixes(game_name: str) -> list:
         """
-        Searches both Online-Fix and FreeTP for the game.
+        Searches Ryuu, Online-Fix, and FreeTP for the game.
         Returns a list of dictionaries with keys: 'source', 'title', 'version', 'url'.
         """
         import re
@@ -30,13 +30,16 @@ class UnifiedFixFetcher:
         
         of_task = onlinefix_api.search_game(search_query, limit=10)
         ft_task = freetp_api.search_game(search_query)
+        ryuu_task = ryuu_api.get_available_fixes(search_query)
 
-
-        of_results, ft_result = await asyncio.gather(of_task, ft_task, return_exceptions=True)
+        of_results, ft_result, ryuu_res = await asyncio.gather(of_task, ft_task, ryuu_task, return_exceptions=True)
 
         fixes = []
 
-        async def _process_results(of_res, ft_res):
+        async def _process_results(of_res, ft_res, r_res):
+            if not isinstance(r_res, Exception) and r_res:
+                fixes.extend(r_res)
+                
             if not isinstance(of_res, Exception) and of_res:
                 of_best = of_res[0]
                 try:
@@ -52,7 +55,7 @@ class UnifiedFixFetcher:
                 ft_best["source"] = "freetp"
                 fixes.append(ft_best)
 
-        await _process_results(of_results, ft_result)
+        await _process_results(of_results, ft_result, ryuu_res)
         
         # Eğer iki siteden de hicbir sonuc donmediyse ismin icindeki noktalama/rakamlari 
         # silip (ornegin PEAK.53 -> PEAK) tekrar kaba bir arama yapalim.
@@ -64,8 +67,9 @@ class UnifiedFixFetcher:
                 # OnlineFix flood control e takilabilir, ama FreeTP takilmaz.
                 of_task2 = onlinefix_api.search_game(clean_name, limit=10)
                 ft_task2 = freetp_api.search_game(clean_name)
-                of_res2, ft_res2 = await asyncio.gather(of_task2, ft_task2, return_exceptions=True)
-                await _process_results(of_res2, ft_res2)
+                r_task2 = ryuu_api.get_available_fixes(clean_name)
+                of_res2, ft_res2, r_res2 = await asyncio.gather(of_task2, ft_task2, r_task2, return_exceptions=True)
+                await _process_results(of_res2, ft_res2, r_res2)
 
         # Sort fixes so the highest version comes first
         def get_ver_tuple(fix):

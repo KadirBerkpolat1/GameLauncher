@@ -11,7 +11,7 @@ from src.ui.library_widget import LibraryWidget
 from src.ui.downloads_widget import DownloadsWidget
 from src.ui.settings_dialog import SettingsDialog
 from src.ui.hubcap_tools_widget import HubcapToolsWidget
-
+from src.ui.plugins_widget import PluginsWidget
 
 class MainWindow(QMainWindow):
     """
@@ -104,6 +104,7 @@ class MainWindow(QMainWindow):
         self.btn_library = self._create_nav_button("🎮   My Library")
         self.btn_store = self._create_nav_button("🛍️   Hubcap Store")
         self.btn_downloads = self._create_nav_button("⚡   Downloads")
+        self.btn_plugins = self._create_nav_button("☁️   Cloud & Tools")
         
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
@@ -111,12 +112,13 @@ class MainWindow(QMainWindow):
         self.nav_group.addButton(self.btn_library)
         self.nav_group.addButton(self.btn_store)
         self.nav_group.addButton(self.btn_downloads)
+        self.nav_group.addButton(self.btn_plugins)
 
         sidebar_layout.addWidget(self.btn_installer)
         sidebar_layout.addWidget(self.btn_library)
         sidebar_layout.addWidget(self.btn_store)
         sidebar_layout.addWidget(self.btn_downloads)
-
+        sidebar_layout.addWidget(self.btn_plugins)
         sidebar_layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
         # Bottom System Controls
@@ -195,18 +197,20 @@ class MainWindow(QMainWindow):
         self.library_view = LibraryWidget()           # 1: Library
         self.search_view = SearchWidget()             # 2: Store / Search
         self.downloads_view = DownloadsWidget()       # 3: Downloads
+        self.plugins_view = PluginsWidget()           # 4: Plugins & Cloud
 
         self.stack.addWidget(self.hubcap_tools_view)
         self.stack.addWidget(self.library_view)
         self.stack.addWidget(self.search_view)
         self.stack.addWidget(self.downloads_view)
+        self.stack.addWidget(self.plugins_view)
 
         # Connect Navigation
         self.btn_installer.clicked.connect(lambda: self._switch_view(0))
         self.btn_library.clicked.connect(lambda: self._switch_view(1))
         self.btn_store.clicked.connect(lambda: self._switch_view(2))
         self.btn_downloads.clicked.connect(lambda: self._switch_view(3))
-
+        self.btn_plugins.clicked.connect(lambda: self._switch_view(4))
         # Default view: Library
         self.btn_library.setChecked(True)
         self.stack.setCurrentIndex(1)
@@ -234,7 +238,8 @@ class MainWindow(QMainWindow):
             self.library_view.refresh_library()
         elif index == 3:
             self.downloads_view._load_history()
-
+        elif index == 4:
+            self.plugins_view.refresh_status()
     def _handle_download_requested(self, app_id: int, title: str) -> None:
         self.btn_downloads.setChecked(True)
         self.stack.setCurrentIndex(3)

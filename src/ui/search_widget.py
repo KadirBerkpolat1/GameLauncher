@@ -119,7 +119,23 @@ class SearchWidget(QWidget):
         self.combo_sort.addItems(["Sort: Newest First", "Sort: Name (A-Z)"])
         self.combo_sort.currentIndexChanged.connect(self._load_library)
 
+        # Engine selector
+        engine_lbl = QLabel("Engine:")
+        engine_lbl.setStyleSheet("color: #94A3B8; font-weight: 600; font-size: 12px;")
+        self.combo_engine = QComboBox()
+        self.combo_engine.addItems(["⚡ Auto Engine", "🛡 Hubcap Only", "🐉 Ryuu Only"])
+        cur_p = SettingsManager.get("manifest_provider", "auto")
+        if cur_p == "hubcap":
+            self.combo_engine.setCurrentIndex(1)
+        elif cur_p == "ryuu":
+            self.combo_engine.setCurrentIndex(2)
+        else:
+            self.combo_engine.setCurrentIndex(0)
+        self.combo_engine.currentIndexChanged.connect(self._on_engine_changed)
+
         filters_bar.addWidget(self.combo_sort)
+        filters_bar.addWidget(engine_lbl)
+        filters_bar.addWidget(self.combo_engine)
         filters_bar.addStretch()
 
         self.btn_load = QPushButton("🔄  Reload Store")
@@ -194,6 +210,9 @@ class SearchWidget(QWidget):
         pagination_bar.addStretch()
 
         layout.addWidget(self.pagination_widget)
+    def _on_engine_changed(self, index: int) -> None:
+        p_val = "auto" if index == 0 else ("hubcap" if index == 1 else "ryuu")
+        SettingsManager.set("manifest_provider", p_val)
     def _on_text_changed(self, text: str) -> None:
         if len(text) >= 3:
             self.status_label.setText("⏳  Searching Hubcap API...")
