@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import re
 import tempfile
@@ -6,6 +7,8 @@ import time
 from pathlib import Path
 from src.config.settings import SettingsManager
 from src.utils.manifest import parse_manifest
+
+logger = logging.getLogger(__name__)
 
 class DownloadTask:
     """

@@ -29,7 +29,8 @@ class DownloadManager:
         """Parses Hubcap/Enter-the-Wired style LUA into depot/dlc data.
         Returns dict with appid, game_name, depots {id: {key, desc}}, dlcs.
         AppID is taken from the caller (authoritative); lines carrying a depot
-        decryption key become depots, key-less lines become DLCs."""
+        decryption key become depots, key-less ones become DLCs.
+        The base game app_id is excluded from DLCs."""
         game_data = {"appid": str(app_id), "depots": {}, "dlcs": {}}
 
         all_app_matches = list(
@@ -49,7 +50,7 @@ class DownloadManager:
         )
 
         # Every addappid carrying a depot key is a depot; key-less ones are DLCs.
-        # The game line itself (no key) is never added as a depot.
+        # The base game (matching the requested app_id) is NEVER a DLC.
         for match in all_app_matches:
             args = [arg.strip() for arg in match.group(1).strip().split(",")]
             app_id_line = args[0]
@@ -62,7 +63,9 @@ class DownloadManager:
                 depot_key = args[2].strip('"')
                 game_data["depots"][app_id_line] = {"key": depot_key, "desc": desc}
             else:
-                game_data["dlcs"][app_id_line] = desc
+                # Only add as DLC if it's NOT the base game
+                if str(app_id_line) != str(app_id):
+                    game_data["dlcs"][app_id_line] = desc
 
         # Optional manifest sizes: setManifestid(depot, "manifest", size)
         manifest_size_matches = list(
@@ -77,7 +80,6 @@ class DownloadManager:
             game_data["manifest_sizes"][match.group(1).strip()] = match.group(2).strip()
 
         return game_data
-
     @staticmethod
     def process_zip_bytes(zip_bytes: bytes) -> tuple:
         """Extracts the full Lua and .manifest files from a game ZIP.
@@ -288,13 +290,30 @@ class DownloadManager:
 
         info = await DownloadManager.fetch_installdir_and_buildid(app_id)
 
+        # Start with DLCs from Lua parser
+        dlcs = parsed.get("dlcs", {})
+
+        # Fallback: If no DLCs found in Lua, fetch from Steam API
+        if not dlcs:
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(f"https://store.steampowered.com/api/appdetails?appids={app_id}")
+                    data = resp.json()
+                    if data.get(str(app_id), {}).get("success"):
+                        steam_dlcs = data[str(app_id)]["data"].get("dlc", [])
+                        if steam_dlcs:
+                            dlcs = {str(dlc_id): f"DLC {dlc_id}" for dlc_id in steam_dlcs}
+            except Exception:
+                pass  # Silently ignore Steam API failures
+
         game_data = {
             "appid": str(app_id),
             "game_name": parsed.get("game_name", f"App_{app_id}"),
             "installdir": info.get("installdir") or parsed.get("installdir"),
             "buildid": info.get("buildid") or "",
             "depots": depots,
-            "dlcs": parsed.get("dlcs", {}),  # Include DLCs
+            "dlcs": dlcs,  # Include DLCs (from Lua or Steam API fallback)
             "manifests": {
                 depot_id: d.get("manifest_id")
                 for depot_id, d in depots.items()

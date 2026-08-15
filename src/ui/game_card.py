@@ -362,9 +362,11 @@ class GameCard(QFrame):
                     subprocess.Popen(["xdg-open", f"steam://install/{self.app_id}"], start_new_session=True)
                     QMessageBox.information(self, "Moon Engine", 
                         f"{self.title} injected to Steam.\nSteam download dialog should open automatically.\nIf not, restart Steam and check Library.")
+                    
+                    # Check for DLCs and show DLC button if available
+                    await self._check_and_show_dlc_button()
                 else:
                     raise Exception("Failed to inject Lua into Steam.")
-            else:
                 from src.services.download import DownloadManager
                 await DownloadManager.prepare_game_data(self.app_id, scope="full")
                 self.btn_download.setText("✓ In Library")
@@ -710,3 +712,26 @@ class GameCard(QFrame):
             hide_action.triggered.connect(lambda: self.set_hidden(True))
         
         menu.exec(self.mapToGlobal(pos))
+    async def _check_and_show_dlc_button(self) -> None:
+        """Check if game has DLCs and show DLC button if available."""
+        if not hasattr(self, 'btn_add_dlc'):
+            return
+        try:
+            from src.services.download import DownloadManager
+            game_data = await DownloadManager.prepare_game_data(self.app_id, scope="full")
+            dlcs = game_data.get("dlcs", {})
+            print(f"DEBUG: DLC check for {self.title} (app_id={self.app_id}): dlcs={dlcs}")
+            if dlcs:
+                self.btn_add_dlc.setVisible(True)
+                self.btn_add_dlc.setToolTip(f"{len(dlcs)} DLC(s) available")
+                # Force show
+                self.btn_add_dlc.show()
+                self.btn_add_dlc.raise_()
+                # Force layout update
+                self.btn_add_dlc.updateGeometry()
+                if self.btn_add_dlc.parent():
+                    self.btn_add_dlc.parent().update()
+                    self.btn_add_dlc.parent().layout().activate()
+                print(f"DEBUG: DLC button shown for {self.title}, isVisible={self.btn_add_dlc.isVisible()}, isHidden={self.btn_add_dlc.isHidden()}")
+        except Exception as e:
+            print(f"Error checking DLCs: {e}")
