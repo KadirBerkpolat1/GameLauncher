@@ -189,11 +189,13 @@ class GameCard(QFrame):
                 from src.config.settings import SettingsManager
                 mode = SettingsManager.get("steam_integration_mode", "classic")
                 if mode == "moon":
-                    self.btn_download = QPushButton("➕ Add to Steam (Moon)")
+                    self.btn_download = QPushButton("➕ Install via Steam (Moon)")
+                    self.btn_download.setProperty("cssClass", "PrimaryAction")
+                    self.btn_download.clicked.connect(self._add_to_library)
                 else:
                     self.btn_download = QPushButton("⬇  Download")
-                self.btn_download.setProperty("cssClass", "PrimaryAction")
-                self.btn_download.clicked.connect(self._request_download)
+                    self.btn_download.setProperty("cssClass", "PrimaryAction")
+                    self.btn_download.clicked.connect(self._request_download)
                 btn_container.addWidget(self.btn_download)
 
                 self.btn_uninstall = QPushButton("✕  Remove from list")
