@@ -99,12 +99,18 @@ class RyuuClient:
             logger.warning(f"Failed to fetch fixes.json from Ryuu: {e}")
             return []
             
-        search_query = re.sub(r'[\W_]+', '', game_name.lower())
+        search_words = set(re.findall(r'[a-z0-9]+', game_name.lower()))
         fixes = []
         
         for item in data:
-            item_name = re.sub(r'[\W_]+', '', item.get("name", "").lower())
-            if item_name == search_query or search_query in item_name:
+            item_words = set(re.findall(r'[a-z0-9]+', item.get("name", "").lower()))
+            # Exact word-set match, or single-word query matching a
+            # longer name (e.g. 'peak' -> 'PEAK'). Avoids substring
+            # collisions like 'Elden Ring' matching ELDEN RING NIGHTREIGN.
+            if search_words and (
+                item_words == search_words
+                or (len(search_words) == 1 and search_words.issubset(item_words))
+            ):
                 for fix in item.get("fixes", []):
                     fixes.append({
                         "source": "ryuu",
