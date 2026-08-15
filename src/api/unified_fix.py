@@ -64,14 +64,14 @@ class UnifiedFixFetcher:
                         "metadata": fix.metadata,
                     })
         
-        # Add Goldberg as explicit offline choice
+        # Add Goldberg as explicit offline fallback (NOT a provider, always available local fallback)
         result.append({
             "source": "goldberg",
             "title": "Remove Steam DRM (Singleplayer / Offline Only)",
             "version": "Auto",
             "url": "",
             "badges": ["Offline"],
-            "metadata": {},
+            "metadata": {"is_fallback": True},
         })
         
         logger.info(f"UnifiedFixFetcher: Returning {len(result)} fixes for '{game_name}'")

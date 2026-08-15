@@ -40,13 +40,17 @@ class FixPickDialog(QDialog):
                 self.fixes_by_source[source] = []
             self.fixes_by_source[source].append(fix)
 
-        # Provider display names and icons
+        # Provider display names and icons (external providers)
         self.provider_info = {
             "ryuu": {"name": "Ryuu", "icon": "🌙", "color": "#A371F7"},
             "crackbypass": {"name": "CrackBypass", "icon": "🔓", "color": "#F85149"},
             "onlinefix": {"name": "OnlineFix", "icon": "🌐", "color": "#3FB950"},
             "freetp": {"name": "FreeTP", "icon": "🆓", "color": "#D29922"},
-            "goldberg": {"name": "Goldberg", "icon": "🎮", "color": "#58A6FF"},
+        }
+        
+        # Fallback info (local, not a provider)
+        self.fallback_info = {
+            "goldberg": {"name": "Goldberg Steam Emulator", "icon": "🎮", "color": "#58A6FF", "description": "Offline DRM removal (local fallback)"},
         }
 
         # Create tab widget
@@ -55,7 +59,10 @@ class FixPickDialog(QDialog):
         
         self.all_list_widgets = []
         
+        # Add provider tabs (external sources)
         for source, source_fixes in self.fixes_by_source.items():
+            if source == "goldberg":
+                continue  # Handle Goldberg separately as fallback
             info = self.provider_info.get(source, {"name": source.capitalize(), "icon": "📦", "color": "#8B949E"})
             tab_name = f"{info['icon']}  {info['name']} ({len(source_fixes)})"
             
@@ -65,7 +72,6 @@ class FixPickDialog(QDialog):
             
             # Add info label
             if source_fixes:
-                # Show best version
                 best = source_fixes[0]
                 version = best.get("version", "1.0.0")
                 badges = best.get("badges", [])
@@ -87,8 +93,34 @@ class FixPickDialog(QDialog):
             
             self.tab_widget.addTab(tab_widget, tab_name)
         
+        # Add Goldberg fallback as a special section at the end
+        goldberg_fixes = self.fixes_by_source.get("goldberg", [])
+        if goldberg_fixes:
+            fallback_info = self.fallback_info["goldberg"]
+            tab_name = f"{fallback_info['icon']}  {fallback_info['name']} (Fallback)"
+            
+            tab_widget = QWidget()
+            tab_layout = QVBoxLayout(tab_widget)
+            tab_layout.setContentsMargins(8, 8, 8, 8)
+            
+            # Description
+            desc_label = QLabel(fallback_info["description"])
+            desc_label.setStyleSheet(f"color: {fallback_info['color']}; font-size: 11px; font-weight: 600;")
+            desc_label.setWordWrap(True)
+            tab_layout.addWidget(desc_label)
+            
+            list_widget = QListWidget()
+            list_widget.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+            for fix in goldberg_fixes:
+                # Use fallback info for display
+                item = self._create_fix_item(fix, "goldberg", fallback_info, list_widget)
+                list_widget.addItem(item)
+            self.all_list_widgets.append((list_widget, "goldberg"))
+            tab_layout.addWidget(list_widget)
+            
+            self.tab_widget.addTab(tab_widget, tab_name)
+        
         layout.addWidget(self.tab_widget)
-
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
