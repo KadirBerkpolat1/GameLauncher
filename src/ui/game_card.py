@@ -471,6 +471,11 @@ class GameCard(QFrame):
                 self, "Success",
                 f"Fix ({source}) applied successfully!\nLaunch options updated - no Steam restart needed!"
             )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to apply fix: {e}")
+        finally:
+            self.btn_apply_fix.setText("🔧 Fix")
+            self.btn_apply_fix.setEnabled(True)
 
     def _uninstall_game(self) -> None:
         from src.services.uninstall import UninstallManager
@@ -504,13 +509,9 @@ class GameCard(QFrame):
 
     def _is_cloud_enabled_for_game(self) -> bool:
         """Checks if CloudRedirect LD_PRELOAD is active for this game."""
-        from src.utils.paths import get_steam_path
         from src.utils.vdf_parser import LocalConfigManager
         from src.services.cloud_redirect import CR_SO_PATH
-        steam_path = get_steam_path()
-        if not steam_path:
-            return False
-        manager = LocalConfigManager(steam_path)
+        manager = LocalConfigManager()
         opts = manager.get_launch_options(str(self.app_id)) or ""
         return str(CR_SO_PATH.name) in opts or "cloud_redirect.so" in opts
 
