@@ -618,6 +618,82 @@ class SettingsDialog(QDialog):
         ddm_layout.addLayout(ddm_btn_row)
         layout.addWidget(card_ddm)
 
+        # slsteam-moon Card
+        card_moon = QFrame()
+        card_moon.setObjectName("SurfaceCard")
+        moon_layout = QVBoxLayout(card_moon)
+        moon_layout.setSpacing(10)
+
+        moon_header_row = QHBoxLayout()
+        moon_title = QLabel("🌙   slsteam-moon (SLSsteam + Steamless + Lua)")
+        moon_title.setStyleSheet("font-size: 15px; font-weight: 700; color: #FFFFFF;")
+
+        self.lbl_moon_status = QLabel("●  Checking...")
+        self.lbl_moon_status.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 700;")
+
+        moon_header_row.addWidget(moon_title)
+        moon_header_row.addStretch()
+        moon_header_row.addWidget(self.lbl_moon_status)
+
+        moon_desc = QLabel("Enhanced SLSsteam with SteamStub bypass, Lua manifest importer, and Steamless wrapper.")
+        moon_desc.setStyleSheet("color: #94A3B8; font-size: 12px;")
+
+        moon_btn_row = QHBoxLayout()
+        btn_install_moon = QPushButton("Install / Update slsteam-moon")
+        btn_install_moon.setProperty("cssClass", "PrimaryAction")
+        btn_install_moon.clicked.connect(self._install_slsteam_moon)
+
+        btn_uninstall_moon = QPushButton("Uninstall slsteam-moon")
+        btn_uninstall_moon.setProperty("cssClass", "DangerAction")
+        btn_uninstall_moon.clicked.connect(self._uninstall_slsteam_moon)
+
+        moon_btn_row.addWidget(btn_install_moon)
+        moon_btn_row.addWidget(btn_uninstall_moon)
+        moon_btn_row.addStretch()
+
+        moon_layout.addLayout(moon_header_row)
+        moon_layout.addWidget(moon_desc)
+        moon_layout.addLayout(moon_btn_row)
+        layout.addWidget(card_moon)
+
+        # Lumen Card
+        card_lumen = QFrame()
+        card_lumen.setObjectName("SurfaceCard")
+        lumen_layout = QVBoxLayout(card_lumen)
+        lumen_layout.setSpacing(10)
+
+        lumen_header_row = QHBoxLayout()
+        lumen_title = QLabel("💡   Lumen (CEF Bridge for Steam UI)")
+        lumen_title.setStyleSheet("font-size: 15px; font-weight: 700; color: #FFFFFF;")
+
+        self.lbl_lumen_status = QLabel("●  Checking...")
+        self.lbl_lumen_status.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 700;")
+
+        lumen_header_row.addWidget(lumen_title)
+        lumen_header_row.addStretch()
+        lumen_header_row.addWidget(self.lbl_lumen_status)
+
+        lumen_desc = QLabel("Lightweight Lua bridge that injects LuaTools frontend through Steam's CEF debugging endpoint.")
+        lumen_desc.setStyleSheet("color: #94A3B8; font-size: 12px;")
+
+        lumen_btn_row = QHBoxLayout()
+        btn_install_lumen = QPushButton("Install / Update Lumen")
+        btn_install_lumen.setProperty("cssClass", "PrimaryAction")
+        btn_install_lumen.clicked.connect(self._install_lumen)
+
+        btn_uninstall_lumen = QPushButton("Uninstall Lumen")
+        btn_uninstall_lumen.setProperty("cssClass", "DangerAction")
+        btn_uninstall_lumen.clicked.connect(self._uninstall_lumen)
+
+        lumen_btn_row.addWidget(btn_install_lumen)
+        lumen_btn_row.addWidget(btn_uninstall_lumen)
+        lumen_btn_row.addStretch()
+
+        lumen_layout.addLayout(lumen_header_row)
+        lumen_layout.addWidget(lumen_desc)
+        lumen_layout.addLayout(lumen_btn_row)
+        layout.addWidget(card_lumen)
+
         layout.addStretch()
         self._update_tools_status()
 
@@ -644,23 +720,36 @@ class SettingsDialog(QDialog):
             self.lbl_ddm_status.setText("○  Not Installed")
             self.lbl_ddm_status.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 700;")
 
-    def _install_slssteam(self) -> None:
-        steam_path = self.input_steam_path.text().strip() or str(get_steam_path() or "")
-        if not steam_path:
-            QMessageBox.warning(self, "Error", "Please set your Steam path first.")
-            return
+        # 3. Check slsteam-moon status
+        from src.services.plugin_manager import PluginManager
+        status = PluginManager.get_status()
+        if status["slsteam_moon"]:
+            self.lbl_moon_status.setText("●  Installed")
+            self.lbl_moon_status.setStyleSheet("color: #34D399; font-size: 11px; font-weight: 700;")
+        else:
+            self.lbl_moon_status.setText("○  Not Installed")
+            self.lbl_moon_status.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 700;")
 
+        # 4. Check Lumen status
+        if status["lumen"]:
+            self.lbl_lumen_status.setText("●  Installed")
+            self.lbl_lumen_status.setStyleSheet("color: #34D399; font-size: 11px; font-weight: 700;")
+        else:
+            self.lbl_lumen_status.setText("○  Not Installed")
+            self.lbl_lumen_status.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 700;")
+
+    def _install_slssteam(self) -> None:
         def _on_log(msg):
             pass
 
-        def _on_done(success):
+        def _on_done(success, msg=""):
             self._update_tools_status()
             if success:
                 QMessageBox.information(self, "Success", "SLSsteam installed successfully!\nPlease restart Steam.")
             else:
-                QMessageBox.critical(self, "Error", "Failed to install SLSsteam. Check console output.")
+                QMessageBox.critical(self, "Error", f"Failed to install SLSsteam. {msg}")
 
-        SLSsteamInstaller.run_installer_async(Path(steam_path), _on_log, _on_done)
+        SLSsteamInstaller.run_installer_async(_on_log, _on_done)
 
     def _uninstall_slssteam(self) -> None:
         reply = QMessageBox.question(
@@ -714,6 +803,90 @@ class SettingsDialog(QDialog):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to uninstall DDMod: {e}")
         loop.create_task(_async_uninstall())
+
+    def _install_slsteam_moon(self) -> None:
+        from src.services.plugin_manager import PluginManager
+        loop = get_async_loop()
+
+        async def _task():
+            try:
+                success = await PluginManager.install_slsteam_moon(
+                    progress_callback=lambda msg: None
+                )
+                self._update_tools_status()
+                if success:
+                    QMessageBox.information(self, "Success", "slsteam-moon installed successfully!\nPlease restart Steam.")
+                else:
+                    QMessageBox.critical(self, "Error", "Failed to install slsteam-moon. Check console output.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to install slsteam-moon: {e}")
+
+        loop.create_task(_task())
+
+    def _uninstall_slsteam_moon(self) -> None:
+        reply = QMessageBox.question(
+            self, "Uninstall slsteam-moon",
+            "Are you sure you want to remove slsteam-moon and its components?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        from src.services.plugin_manager import PluginManager
+        loop = get_async_loop()
+
+        async def _task():
+            try:
+                await PluginManager.uninstall_slsteam_moon()
+                self._update_tools_status()
+                QMessageBox.information(self, "Success", "slsteam-moon has been removed.\nPlease restart Steam.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to uninstall slsteam-moon: {e}")
+
+        loop.create_task(_task())
+
+    def _install_lumen(self) -> None:
+        from src.services.plugin_manager import PluginManager
+        loop = get_async_loop()
+
+        async def _task():
+            try:
+                success = await PluginManager.install_lumen(
+                    progress_callback=lambda msg: None
+                )
+                self._update_tools_status()
+                if success:
+                    QMessageBox.information(self, "Success", "Lumen installed successfully!\nNebula custom lua overlayed.")
+                else:
+                    QMessageBox.critical(self, "Error", "Failed to install Lumen. Check console output.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to install Lumen: {e}")
+
+        loop.create_task(_task())
+
+    def _uninstall_lumen(self) -> None:
+        reply = QMessageBox.question(
+            self, "Uninstall Lumen",
+            "Are you sure you want to remove Lumen and its lua scripts?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        from src.services.plugin_manager import PluginManager
+        loop = get_async_loop()
+
+        async def _task():
+            try:
+                await PluginManager.uninstall_lumen()
+                self._update_tools_status()
+                QMessageBox.information(self, "Success", "Lumen has been removed.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to uninstall Lumen: {e}")
+
+        loop.create_task(_task())
     # =========================================================================
     def _on_test_sgdb_key(self) -> None:
         key = self.input_sgdb_key.text().strip()

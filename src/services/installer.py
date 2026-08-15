@@ -1,7 +1,9 @@
 import asyncio
+import subprocess
 import httpx
 import shutil
 from pathlib import Path
+from src.config.settings import SettingsManager
 
 class InstallerError(Exception):
     pass
@@ -57,7 +59,6 @@ class DDModInstaller:
         bin_path.write_bytes(content)
         bin_path.chmod(0o755)
 
-        from src.config.settings import SettingsManager
         SettingsManager.set("depotdownloadermod_path", str(bin_path))
         return f"3.4.0-mod (from {source})"
 
@@ -70,7 +71,6 @@ class DDModInstaller:
     @classmethod
     def run_installer_async(cls, progress_callback: callable, done_callback: callable) -> None:
         """Runs DDMod update in background thread."""
-        import asyncio
         from src.utils.async_utils import get_async_loop
         
         async def _task():
@@ -127,7 +127,6 @@ class SLSsteamInstaller:
     @classmethod
     def run_installer_async(cls, progress_callback: callable, done_callback: callable) -> None:
         """Runs SLSsteam update in background thread."""
-        import asyncio
         from src.utils.async_utils import get_async_loop
         
         async def _task():
@@ -138,11 +137,3 @@ class SLSsteamInstaller:
                 done_callback(False, f"SLSsteam update failed: {e}")
         
         asyncio.run_coroutine_threadsafe(_task(), get_async_loop())
-        import subprocess
-        subprocess.run(
-            ["flatpak", "override", "--user",
-             "--unset-env=LD_AUDIT", "--unset-env=SHARED_LIBRARY_GUARD",
-             "com.valvesoftware.Steam"],
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
