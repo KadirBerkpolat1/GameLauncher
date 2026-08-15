@@ -211,4 +211,8 @@ class LocalConfigManager:
             parts.append(cleaned)
         launch_opts = " ".join(parts)
 
+        # Ensure %command% is present at the end (Steam needs it to launch)
+        if "%command%" not in launch_opts:
+            launch_opts += " %command%"
+
         self.set_launch_options(app_id, launch_opts)
