@@ -13,16 +13,18 @@ from src.services.plugin_manager import PluginManager
 from src.services.cloud_redirect import CloudRedirectManager, CR_TOKENS_DIR
 from src.utils.async_utils import get_async_loop
 
+
 class PluginsWidget(QWidget):
     """
-    UI View for managing Steam Tools & Cloud Saves:
-    - Headcrab / SLSsteam (Client pinning & license bypass)
-    - CloudRedirect (Custom cloud saves via LD_PRELOAD)
-    - Goldberg Emulator status
+    UI View for managing Steam Modding Stack & Cloud Saves:
+    - slsteam-moon (SLSsteam.so + Lumen lua + Steamless + SteamStub bypass)
+    - lumen (Standalone Steam overlay/menu integration)
+    - CloudRedirect (Custom cloud saves via LD_PRELOAD hook)
     """
 
     def __init__(self) -> None:
         super().__init__()
+        self._oauth_runner = None
         self.init_ui()
         self.refresh_status()
 
@@ -36,10 +38,10 @@ class PluginsWidget(QWidget):
         title_box = QVBoxLayout()
         title_box.setSpacing(3)
 
-        header = QLabel("Steam Tools & Cloud Saves")
+        header = QLabel("Steam Modding Stack & Cloud Saves")
         header.setProperty("cssClass", "HeaderTitle")
 
-        sub = QLabel("Manage Headcrab SLSsteam client pinning, CloudRedirect cloud saves, and DRM tools")
+        sub = QLabel("Manage slsteam-moon, lumen, and CloudRedirect cloud saves")
         sub.setProperty("cssClass", "SubHeader")
 
         title_box.addWidget(header)
@@ -63,35 +65,69 @@ class PluginsWidget(QWidget):
         scroll_layout.setContentsMargins(0, 0, 0, 0)
 
         # =====================================================================
-        # 1. HEADCRAB / SLSSTEAM CARD
+        # 1. SLSTEAM-MOON CARD
         # =====================================================================
-        self.headcrab_card = self._create_card(
-            "🦀  Headcrab (SLSsteam Engine & Client Pinning)",
-            "Automates Steam client pinning and SLSsteam injection to prevent Valve updates from breaking library integrations."
+        self.slsteam_card = self._create_card(
+            "🌙  slsteam-moon (Modern Steam Engine)",
+            "SLSsteam.so + Lumen lua scripts + Steamless + SteamStub bypass — all-in-one replacement for Headcrab/SLSsteam. Enables Lua manifest downloads, native Steam downloads, and automatic fix application."
         )
-        hc_layout = self.headcrab_card.layout()
+        sls_layout = self.slsteam_card.layout()
 
-        self.lbl_headcrab_status = QLabel("Checking SLSsteam status...")
-        self.lbl_headcrab_status.setStyleSheet("color: #818CF8; font-weight: 700; font-size: 13px;")
-        hc_layout.addWidget(self.lbl_headcrab_status)
+        self.lbl_sls_status = QLabel("Checking slsteam-moon status...")
+        self.lbl_sls_status.setStyleSheet("color: #818CF8; font-weight: 700; font-size: 13px;")
+        sls_layout.addWidget(self.lbl_sls_status)
 
-        hc_btn_box = QHBoxLayout()
-        self.btn_install_headcrab = QPushButton("🚀  Install / Update Headcrab Engine")
-        self.btn_install_headcrab.setProperty("cssClass", "PrimaryAction")
-        self.btn_install_headcrab.clicked.connect(self._on_install_headcrab)
+        sls_btn_box = QHBoxLayout()
+        self.btn_install_slsteam = QPushButton("📥  Install / Update slsteam-moon")
+        self.btn_install_slsteam.setProperty("cssClass", "PrimaryAction")
+        self.btn_install_slsteam.clicked.connect(self._on_install_slsteam)
 
-        hc_btn_box.addWidget(self.btn_install_headcrab)
-        hc_btn_box.addStretch()
-        hc_layout.addLayout(hc_btn_box)
+        self.btn_uninstall_slsteam = QPushButton("🗑  Uninstall slsteam-moon")
+        self.btn_uninstall_slsteam.setProperty("cssClass", "DangerAction")
+        self.btn_uninstall_slsteam.clicked.connect(self._on_uninstall_slsteam)
 
-        scroll_layout.addWidget(self.headcrab_card)
+        sls_btn_box.addWidget(self.btn_install_slsteam)
+        sls_btn_box.addWidget(self.btn_uninstall_slsteam)
+        sls_btn_box.addStretch()
+        sls_layout.addLayout(sls_btn_box)
+
+        scroll_layout.addWidget(self.slsteam_card)
 
         # =====================================================================
-        # 2. CLOUDREDIRECT CARD
+        # 2. LUMEN CARD (Optional standalone overlay)
+        # =====================================================================
+        self.lumen_card = self._create_card(
+            "💡  lumen (Steam Overlay & Menu Integration)",
+            "Standalone Steam overlay replacement with fixes menu, cloud settings, updates tab, and Steam Deck-like UI. Installs to ~/.local/share/Lumen/ and Steam/plugins/. Optional — only needed if you want the custom Steam overlay."
+        )
+        lumen_layout = self.lumen_card.layout()
+
+        self.lbl_lumen_status = QLabel("Checking lumen status...")
+        self.lbl_lumen_status.setStyleSheet("color: #FBBF24; font-weight: 700; font-size: 13px;")
+        lumen_layout.addWidget(self.lbl_lumen_status)
+
+        lumen_btn_box = QHBoxLayout()
+        self.btn_install_lumen = QPushButton("📥  Install / Update lumen")
+        self.btn_install_lumen.setProperty("cssClass", "PrimaryAction")
+        self.btn_install_lumen.clicked.connect(self._on_install_lumen)
+
+        self.btn_uninstall_lumen = QPushButton("🗑  Uninstall lumen")
+        self.btn_uninstall_lumen.setProperty("cssClass", "DangerAction")
+        self.btn_uninstall_lumen.clicked.connect(self._on_uninstall_lumen)
+
+        lumen_btn_box.addWidget(self.btn_install_lumen)
+        lumen_btn_box.addWidget(self.btn_uninstall_lumen)
+        lumen_btn_box.addStretch()
+        lumen_layout.addLayout(lumen_btn_box)
+
+        scroll_layout.addWidget(self.lumen_card)
+
+        # =====================================================================
+        # 3. CLOUDREDIRECT CARD
         # =====================================================================
         self.cloud_card = self._create_card(
             "☁  CloudRedirect (Custom Cloud Saves)",
-            "Redirects Steam Cloud save operations to your own storage (Local Folder, Google Drive, OneDrive) via a lightweight LD_PRELOAD hook."
+            "Redirects Steam Cloud save operations to your own storage (Local Folder, Google Drive, OneDrive) via a lightweight 32-bit LD_PRELOAD hook."
         )
         cloud_layout = self.cloud_card.layout()
 
@@ -217,7 +253,7 @@ class PluginsWidget(QWidget):
         scroll_layout.addWidget(self.cloud_card)
 
         # =====================================================================
-        # 3. CONSOLE & ACTIVITY LOG
+        # 4. CONSOLE & ACTIVITY LOG
         # =====================================================================
         log_card = self._create_card("📋  Activity & Status Log", "")
         log_layout = log_card.layout()
@@ -271,13 +307,24 @@ class PluginsWidget(QWidget):
 
     def refresh_status(self) -> None:
         status = PluginManager.get_status()
-        if status["slssteam"]:
-            self.lbl_headcrab_status.setText("●  SLSsteam Engine: Installed & Active")
-            self.lbl_headcrab_status.setStyleSheet("color: #10B981; font-weight: 700; font-size: 13px;")
+        
+        # slsteam-moon
+        if status["slsteam_moon"]:
+            self.lbl_sls_status.setText(f"●  slsteam-moon: Installed ({status['slsteam_moon_dir']})")
+            self.lbl_sls_status.setStyleSheet("color: #10B981; font-weight: 700; font-size: 13px;")
         else:
-            self.lbl_headcrab_status.setText("○  SLSsteam Engine: Not Installed")
-            self.lbl_headcrab_status.setStyleSheet("color: #64748B; font-weight: 700; font-size: 13px;")
+            self.lbl_sls_status.setText("○  slsteam-moon: Not Installed")
+            self.lbl_sls_status.setStyleSheet("color: #64748B; font-weight: 700; font-size: 13px;")
 
+        # lumen
+        if status["lumen"]:
+            self.lbl_lumen_status.setText(f"●  lumen: Installed ({status['lumen_dir']})")
+            self.lbl_lumen_status.setStyleSheet("color: #10B981; font-weight: 700; font-size: 13px;")
+        else:
+            self.lbl_lumen_status.setText("○  lumen: Not Installed (Optional)")
+            self.lbl_lumen_status.setStyleSheet("color: #64748B; font-weight: 700; font-size: 13px;")
+
+        # CloudRedirect
         cr_installed = CloudRedirectManager.is_installed()
         if cr_installed:
             self.lbl_cr_status.setText("●  CloudRedirect: Hook Installed")
@@ -333,18 +380,86 @@ class PluginsWidget(QWidget):
         if path:
             self.txt_save_path.setText(path)
 
-    def _on_install_headcrab(self) -> None:
-        self.btn_install_headcrab.setEnabled(False)
-        self.log("Starting Headcrab / SLSsteam setup...")
+    def _on_install_slsteam(self) -> None:
+        self.btn_install_slsteam.setEnabled(False)
+        self.btn_uninstall_slsteam.setEnabled(False)
+        self.log("Installing slsteam-moon...")
 
         async def _task():
             try:
-                await PluginManager.install_headcrab(progress_callback=self.log)
-                self.log("✓ Headcrab setup completed.")
+                ok = await PluginManager.install_slsteam_moon(progress_callback=self.log)
+                if ok:
+                    self.log("✓ slsteam-moon installed successfully.")
+                else:
+                    self.log("✗ slsteam-moon installation failed.")
             except Exception as e:
-                self.log(f"✗ Headcrab error: {e}")
+                self.log(f"✗ slsteam-moon error: {e}")
             finally:
-                self.btn_install_headcrab.setEnabled(True)
+                self.btn_install_slsteam.setEnabled(True)
+                self.btn_uninstall_slsteam.setEnabled(True)
+                self.refresh_status()
+
+        asyncio.run_coroutine_threadsafe(_task(), get_async_loop())
+
+    def _on_uninstall_slsteam(self) -> None:
+        self.btn_install_slsteam.setEnabled(False)
+        self.btn_uninstall_slsteam.setEnabled(False)
+        self.log("Uninstalling slsteam-moon...")
+
+        async def _task():
+            try:
+                ok = await PluginManager.uninstall_slsteam_moon()
+                if ok:
+                    self.log("✓ slsteam-moon uninstalled.")
+                else:
+                    self.log("✗ slsteam-moon uninstall failed.")
+            except Exception as e:
+                self.log(f"✗ slsteam-moon uninstall error: {e}")
+            finally:
+                self.btn_install_slsteam.setEnabled(True)
+                self.btn_uninstall_slsteam.setEnabled(True)
+                self.refresh_status()
+
+        asyncio.run_coroutine_threadsafe(_task(), get_async_loop())
+
+    def _on_install_lumen(self) -> None:
+        self.btn_install_lumen.setEnabled(False)
+        self.btn_uninstall_lumen.setEnabled(False)
+        self.log("Installing lumen...")
+
+        async def _task():
+            try:
+                ok = await PluginManager.install_lumen(progress_callback=self.log)
+                if ok:
+                    self.log("✓ lumen installed successfully.")
+                else:
+                    self.log("✗ lumen installation failed.")
+            except Exception as e:
+                self.log(f"✗ lumen error: {e}")
+            finally:
+                self.btn_install_lumen.setEnabled(True)
+                self.btn_uninstall_lumen.setEnabled(True)
+                self.refresh_status()
+
+        asyncio.run_coroutine_threadsafe(_task(), get_async_loop())
+
+    def _on_uninstall_lumen(self) -> None:
+        self.btn_install_lumen.setEnabled(False)
+        self.btn_uninstall_lumen.setEnabled(False)
+        self.log("Uninstalling lumen...")
+
+        async def _task():
+            try:
+                ok = await PluginManager.uninstall_lumen()
+                if ok:
+                    self.log("✓ lumen uninstalled.")
+                else:
+                    self.log("✗ lumen uninstall failed.")
+            except Exception as e:
+                self.log(f"✗ lumen uninstall error: {e}")
+            finally:
+                self.btn_install_lumen.setEnabled(True)
+                self.btn_uninstall_lumen.setEnabled(True)
                 self.refresh_status()
 
         asyncio.run_coroutine_threadsafe(_task(), get_async_loop())
@@ -398,7 +513,6 @@ class PluginsWidget(QWidget):
         self.lbl_oauth_status.setText("🔄 Opening browser...")
         self.lbl_oauth_status.setStyleSheet("color: #FBBF24; font-weight: 600; font-size: 12px;")
 
-        import secrets
         state = secrets.token_urlsafe(16)
         auth_url = CloudRedirectManager.build_auth_url(provider, state)
 
@@ -464,7 +578,6 @@ class PluginsWidget(QWidget):
             return
 
         # Delete token file
-        from src.services.cloud_redirect import CR_TOKENS_DIR
         token_file = CR_TOKENS_DIR / f"tokens_{provider}.json"
         if token_file.exists():
             token_file.unlink()
@@ -503,8 +616,6 @@ class PluginsWidget(QWidget):
         self._apply_hook_to_selected(apply=False)
 
     def _apply_hook_to_selected(self, apply: bool) -> None:
-        # Simple: parse selected lines from games_list (in a real app, use a proper QListWidget with checkboxes)
-        # For now, apply to all games shown
         try:
             from src.services.acf import get_installed_games
             games = get_installed_games()
