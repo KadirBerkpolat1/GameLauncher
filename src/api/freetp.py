@@ -43,8 +43,10 @@ class FreeTPClient:
             resp.raise_for_status()
             page_html = resp.content.decode('cp1251', errors='replace')
 
+            # Search results use <div class="heading">N. <a href="...">Title</a></div>
             _ARTICLE_RE = re.compile(
-                r'<a href="(https://freetp\.org/[^"]+\.html)"><h2[^>]*>\s*(.*?)\s*</h2></a>'
+                r'<div class="heading">\s*\d+\.\s*<a href="(https://freetp\.org/[^"]+\.html)"[^>]*>(.*?)</a>',
+                re.DOTALL
             )
 
             best_match = None
@@ -52,7 +54,7 @@ class FreeTPClient:
 
             for m in _ARTICLE_RE.finditer(page_html):
                 url = m.group(1)
-                title = html.unescape(m.group(2)).strip()
+                title = html_lib.unescape(m.group(2)).strip()
                 score = score_title_match(query, title)
                 if score > best_score:
                     best_score = score
@@ -61,17 +63,40 @@ class FreeTPClient:
             if not best_match:
                 return None
 
-            # Get version from article page
+            # Get version from article page (from the download/getfile link)
             article_resp = await self._client.get(best_match["url"])
             article_resp.raise_for_status()
             article_html = article_resp.content.decode('cp1251', errors='replace')
-            version = extract_version(article_html)
+            version = self._extract_article_version(article_html)
 
             return {"url": best_match["url"], "version": version, "title": best_match["title"]}
 
         except Exception as e:
             print(f"FreeTP search error: {e}")
             return None
+
+    @staticmethod
+    def _extract_article_version(article_html: str) -> str:
+        """Extracts the game version from the download (getfile) link text.
+
+        FreeTP articles list the version inside the torrent anchor, e.g.
+        'Скачать PEAK stable.2.1.A (14.08.2026) by Pioneer.torrent'.
+        Falls back to generic version extraction from the whole page.
+        """
+        getfile_match = re.search(
+            r'href=["\'][^"\']*getfile-\d+["\'][^>]*>(.*?)</a>',
+            article_html, re.IGNORECASE | re.DOTALL
+        )
+        if getfile_match:
+            link_text = html_lib.unescape(re.sub(r'<[^>]+>', '', getfile_match.group(1)))
+            # Prefer 'stable.x.y.Z' style tokens, then generic v\d+(\\.\\d+)+
+            m = re.search(r'[Ss]table\.\d[\w.]*', link_text)
+            if m:
+                return m.group(0)
+            m = re.search(r'v\.?\d+(?:\.\d+)*[a-zA-Z]*', link_text, re.IGNORECASE)
+            if m:
+                return m.group(0)
+        return extract_version(article_html)
 
     async def download_fix(self, article_url: str, dest_dir: Path) -> Optional[Path]:
         """Downloads the fix (torrent) from the given article URL."""
