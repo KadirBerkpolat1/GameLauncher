@@ -364,7 +364,11 @@ class DownloadTask:
                     url = best_fix["url"]
                     logger.info(f"Auto-applying Ryuu fix from {url}...")
                     dest = Path(tempfile.gettempdir()) / f"ryuu_autofix_{self.app_id}.zip"
-                    async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
+                    headers = {}
+                    ryuu_key = SettingsManager.get("ryuu_api_key", "").strip()
+                    if ryuu_key:
+                        headers["X-Auth-Key"] = ryuu_key
+                    async with httpx.AsyncClient(follow_redirects=True, timeout=120.0, headers=headers) as client:
                         resp = await client.get(url)
                         if resp.status_code == 200:
                             dest.write_bytes(resp.content)

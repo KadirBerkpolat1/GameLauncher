@@ -416,8 +416,13 @@ class GameCard(QFrame):
             elif source == "ryuu":
                 url = best_fix["url"]
                 import httpx
+                from src.config.settings import SettingsManager
                 dest = Path(tempfile.gettempdir()) / f"ryuu_{self.app_id}_fix.zip"
-                async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
+                headers = {}
+                ryuu_key = SettingsManager.get("ryuu_api_key", "").strip()
+                if ryuu_key:
+                    headers["X-Auth-Key"] = ryuu_key
+                async with httpx.AsyncClient(follow_redirects=True, timeout=120.0, headers=headers) as client:
                     resp = await client.get(url)
                     resp.raise_for_status()
                     dest.write_bytes(resp.content)
