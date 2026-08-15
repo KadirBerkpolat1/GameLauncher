@@ -1,4 +1,5 @@
 import os
+import webbrowser
 from pathlib import Path
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit, 
                                QPushButton, QLabel, QHBoxLayout, QCheckBox, 
@@ -11,7 +12,6 @@ from src.utils.paths import get_steam_path
 from src.api.hubcap import hubcap_api
 from src.services.installer import SLSsteamInstaller, DDModInstaller
 from src.utils.async_utils import get_async_loop
-
 
 class SettingsDialog(QDialog):
     """
@@ -175,11 +175,20 @@ class SettingsDialog(QDialog):
         ryuu_layout = QVBoxLayout(group_ryuu)
         ryuu_layout.setSpacing(10)
 
+        # Ryuu API Key + Get Key button
+        key_row = QHBoxLayout()
         self.input_ryuu_key = QLineEdit()
         self.input_ryuu_key.setPlaceholderText("Paste your Ryuu API key (generator.ryuu.lol)...")
         self.input_ryuu_key.setEchoMode(QLineEdit.EchoMode.Password)
         self.input_ryuu_key.setText(SettingsManager.get("ryuu_api_key", ""))
-        ryuu_layout.addWidget(self.input_ryuu_key)
+        key_row.addWidget(self.input_ryuu_key)
+
+        self.btn_get_ryuu_key = QPushButton("🔗  Get API Key")
+        self.btn_get_ryuu_key.setProperty("cssClass", "SecondaryAction")
+        self.btn_get_ryuu_key.setToolTip("Opens generator.ryuu.lol to get your API key")
+        self.btn_get_ryuu_key.clicked.connect(lambda: self._open_url("https://generator.ryuu.lol"))
+        key_row.addWidget(self.btn_get_ryuu_key)
+        ryuu_layout.addLayout(key_row)
 
         # Manifest Provider Selector
         provider_row = QHBoxLayout()
@@ -749,3 +758,7 @@ class SettingsDialog(QDialog):
         SettingsManager.set("download_method", "ddmod")
         hubcap_api.clear_cache()
         self.accept()
+
+    def _open_url(self, url: str) -> None:
+        """Open URL in default browser."""
+        webbrowser.open(url)

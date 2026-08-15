@@ -54,6 +54,7 @@ class GameCard(QFrame):
         self.title = title
         self.image_url = image_url
         self.mode = mode
+        self._hidden = False  # For manual library filtering
         self.setObjectName("GameCard")
         self.setFixedSize(230, 440)
 
@@ -176,10 +177,6 @@ class GameCard(QFrame):
                 mode = SettingsManager.get("steam_integration_mode", "classic")
                 if mode != "moon":
                     self.btn_download = QPushButton("⚡ Re-dl")
-                    self.btn_download.setProperty("cssClass", "SecondaryAction")
-                    self.btn_download.clicked.connect(self._request_download)
-                    sub_row2.addWidget(self.btn_download)
-
                 self.btn_uninstall = QPushButton("🗑 Delete")
                 self.btn_uninstall.setProperty("cssClass", "DangerAction")
                 self.btn_uninstall.clicked.connect(self._uninstall_game)
@@ -202,6 +199,9 @@ class GameCard(QFrame):
                 self.btn_uninstall.setProperty("cssClass", "DangerAction")
                 self.btn_uninstall.clicked.connect(self._uninstall_game)
                 btn_container.addWidget(self.btn_uninstall)
+        # Context menu for library items (both installed and not installed)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
         layout.addLayout(btn_container)
 
         # Network Manager for Image Loading
@@ -579,3 +579,22 @@ class GameCard(QFrame):
             QMessageBox.information(self, "Success", f"CloudRedirect installed and enabled for {self.title}!")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to setup CloudRedirect: {e}")
+    def set_hidden(self, hidden: bool) -> None:
+        """Set hidden state for manual library filtering."""
+        self._hidden = hidden
+        self.setVisible(not hidden)
+
+    def is_hidden(self) -> bool:
+        return self._hidden
+    def _show_context_menu(self, pos) -> None:
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        
+        if self.is_hidden():
+            show_action = menu.addAction("👁  Show in Library")
+            show_action.triggered.connect(lambda: self.set_hidden(False))
+        else:
+            hide_action = menu.addAction("🙈  Hide from Library")
+            hide_action.triggered.connect(lambda: self.set_hidden(True))
+        
+        menu.exec(self.mapToGlobal(pos))

@@ -91,9 +91,8 @@ class LibraryWidget(QWidget):
         self.search_input.setPlaceholderText("🔍  Search games in library...")
         self.search_input.setFixedWidth(280)
         self.search_input.textChanged.connect(self._filter_cards)
-
         self.combo_category = QComboBox()
-        self.combo_category.addItems(["All Items", "Installed Only", "Lua Config Only"])
+        self.combo_category.addItems(["All Items", "Installed Only", "Lua Config Only", "Hidden"])
         self.combo_category.currentIndexChanged.connect(self._filter_cards)
 
         self.combo_sort = QComboBox()
@@ -353,6 +352,8 @@ class LibraryWidget(QWidget):
                 match_cat = bool(getattr(card, '_installed_path', None))
             elif cat == "Lua Config Only":
                 match_cat = not bool(getattr(card, '_installed_path', None))
+            elif cat == "Hidden":
+                match_cat = card.is_hidden()
 
             if match_query and match_cat:
                 card.show()
