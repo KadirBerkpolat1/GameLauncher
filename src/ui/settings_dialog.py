@@ -273,10 +273,19 @@ class SettingsDialog(QDialog):
         self.input_sgdb_key.setEchoMode(QLineEdit.EchoMode.Password)
         self.input_sgdb_key.setText(SettingsManager.get("steamgriddb_api_key", ""))
 
+        sgdb_row = QHBoxLayout()
+        sgdb_row.addWidget(self.input_sgdb_key)
+
+        self.btn_test_sgdb = QPushButton("Test Key")
+        self.btn_test_sgdb.setProperty("cssClass", "SecondaryAction")
+        self.btn_test_sgdb.setFixedWidth(100)
+        self.btn_test_sgdb.clicked.connect(self._on_test_sgdb_key)
+        sgdb_row.addWidget(self.btn_test_sgdb)
+
         sgdb_desc = QLabel("Automatically downloads high-resolution vertical grid posters instead of generic Steam banners.")
         sgdb_desc.setStyleSheet("color: #64748B; font-size: 12px;")
 
-        sgdb_layout.addWidget(self.input_sgdb_key)
+        sgdb_layout.addLayout(sgdb_row)
         sgdb_layout.addWidget(sgdb_desc)
         layout.addWidget(group_sgdb)
 
@@ -675,6 +684,45 @@ class SettingsDialog(QDialog):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to uninstall DDMod: {e}")
         loop.create_task(_async_uninstall())
+    # =========================================================================
+    def _on_test_sgdb_key(self) -> None:
+        key = self.input_sgdb_key.text().strip()
+        if not key:
+            QMessageBox.warning(self, "Test Key", "Please enter an API key first.")
+            return
+
+        self.btn_test_sgdb.setEnabled(False)
+        self.btn_test_sgdb.setText("Testing...")
+
+        import asyncio
+        from src.utils.async_utils import get_async_loop
+        import httpx
+
+        async def _test():
+            try:
+                url = "https://www.steamgriddb.com/api/v2/profile"
+                headers = {"Authorization": f"Bearer {key}"}
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(url, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("success"):
+                            username = data.get("data", {}).get("username", "Unknown")
+                            QMessageBox.information(self, "Test Key", f"✅ Valid key!\nLogged in as: {username}")
+                        else:
+                            QMessageBox.warning(self, "Test Key", f"❌ Invalid key: {data.get('errors', ['Unknown error'])}")
+                    elif resp.status_code == 401:
+                        QMessageBox.warning(self, "Test Key", "❌ Unauthorized: Invalid or expired API key")
+                    else:
+                        QMessageBox.warning(self, "Test Key", f"❌ Error: HTTP {resp.status_code}")
+            except Exception as e:
+                QMessageBox.critical(self, "Test Key", f"❌ Network error: {e}")
+            finally:
+                self.btn_test_sgdb.setEnabled(True)
+                self.btn_test_sgdb.setText("Test Key")
+
+        asyncio.run_coroutine_threadsafe(_test(), get_async_loop())
+
     # =========================================================================
     # SAVE SETTINGS
     # =========================================================================
