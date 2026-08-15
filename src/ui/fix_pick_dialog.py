@@ -16,7 +16,7 @@ class FixPickDialog(QDialog):
             QTabBar::tab:hover { color: #E6EDF3; }
             QListWidget { background-color: #161B22; border: 1px solid #30363D; border-radius: 6px; color: #E6EDF3; }
             QListWidget::item { padding: 12px; border-bottom: 1px solid #21262D; }
-            QListWidget::item:selected { background-color: #1F6FEB; color: #FFFFFF; }
+            QListWidget::item:selected { background-color: #21262D; color: #FFFFFF; border-left: 3px solid #58A6FF; }
             QListWidget::item:hover { background-color: #21262D; }
             QPushButton { background-color: #238636; color: #FFFFFF; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; }
             QPushButton:hover { background-color: #2EA043; }
@@ -77,9 +77,9 @@ class FixPickDialog(QDialog):
                 badges = best.get("badges", [])
                 badge_text = " ".join([f"[{b}]" for b in badges])
                 if badge_text:
-                    info_label = QLabel(f"Best: v{version} {badge_text}")
+                    info_label = QLabel(f"Best: {version} {badge_text}")
                 else:
-                    info_label = QLabel(f"Best: v{version}")
+                    info_label = QLabel(f"Best: {version}")
                 info_label.setStyleSheet(f"color: {info['color']}; font-size: 11px; font-weight: 600;")
                 tab_layout.addWidget(info_label)
             
@@ -140,12 +140,7 @@ class FixPickDialog(QDialog):
         # Connect selection changed for all list widgets
         for list_widget, _ in self.all_list_widgets:
             list_widget.itemSelectionChanged.connect(self._on_selection_changed)
-        
-        # Select first item in first tab
-        if self.all_list_widgets:
-            first_list = self.all_list_widgets[0][0]
-            if first_list.count() > 0:
-                first_list.setCurrentRow(0)
+
     def _create_fix_item(self, fix: dict, source: str, info: dict, list_widget) -> QListWidgetItem:
         """Create a list item with fix details and badges using rich text widget."""
         title = fix.get("title", "Unknown Fix")
@@ -162,7 +157,7 @@ class FixPickDialog(QDialog):
         layout.setSpacing(4)
         
         # Title and version
-        title_label = QLabel(f'<b style="color:#E6EDF3;">{title}</b> <span style="color:#8B949E;">v{version}</span>')
+        title_label = QLabel(f'<b style="color:#E6EDF3;">{title}</b> <span style="color:#8B949E;">{version}</span>')
         title_label.setTextFormat(Qt.TextFormat.RichText)
         title_label.setWordWrap(True)
         layout.addWidget(title_label)
