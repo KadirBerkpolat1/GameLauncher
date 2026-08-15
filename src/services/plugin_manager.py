@@ -40,7 +40,9 @@ class PluginManager:
         sls_installed = False
         sls_dir = ""
         for d in (SLS_DIR, FLATPAK_SLS_DIR):
-            if (d / "bin" / "SLSsteam.so").exists() or (d / "SLSsteam.so").exists():
+            so_exists = (d / "bin" / "SLSsteam.so").exists() or (d / "SLSsteam.so").exists()
+            wrapper_exists = (d / "path" / "steam").exists()
+            if so_exists and wrapper_exists:
                 sls_installed = True
                 sls_dir = str(d)
                 break
@@ -60,11 +62,61 @@ class PluginManager:
         }
 
     @classmethod
+    def _write_askpass(cls) -> Optional[Path]:
+        """Write a small GUI askpass helper (QInputDialog password prompt) so
+        setup.sh can request the sudo password from the user during install.
+        Runs with the app's own interpreter so PySide6 is always available."""
+        import sys
+        try:
+            SLS_DIR.mkdir(parents=True, exist_ok=True)
+            askpass = SLS_DIR / "askpass.py"
+            script = (
+                f"#!{sys.executable}\n"
+                "import sys\n"
+                "from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit\n"
+                "app = QApplication(sys.argv)\n"
+                "pw, ok = QInputDialog.getText(None, 'sudo', "
+                "'sudo password for slsteam-moon installation:', QLineEdit.Password)\n"
+                "if ok and pw:\n"
+                "    print(pw)\n"
+                "    sys.exit(0)\n"
+                "sys.exit(1)\n"
+            )
+            askpass.write_text(script)
+            askpass.chmod(0o755)
+            return askpass
+        except Exception:
+            return None
+
+    @classmethod
+    def _setup_env(cls) -> Dict[str, str]:
+        """Build env for setup.sh. Uses sudo without prompting when credentials
+        are already cached (sudo -n); otherwise wires a GUI askpass helper so
+        the user is prompted for the sudo password during install. If no askpass
+        helper can be created, system launcher interception is skipped and only
+        user desktop coverage applies."""
+        env = os.environ.copy()
+        try:
+            primed = subprocess.run(["sudo", "-n", "true"], capture_output=True, timeout=10).returncode == 0
+        except Exception:
+            primed = False
+        if primed:
+            env["SLSM_SUDO_PRIMED"] = "1"
+        else:
+            askpass = cls._write_askpass()
+            if askpass is not None:
+                env["SUDO_ASKPASS"] = str(askpass)
+            else:
+                env["SLSM_SUDO_DENIED"] = "1"
+        return env
+
+    @classmethod
     async def install_slsteam_moon(cls, progress_callback: Optional[Callable[[str], None]] = None) -> bool:
         """
-        Downloads and installs slsteam-moon release.
-        This REPLACES any existing Headcrab/SLSsteam installation.
-        Includes: SLSsteam.so, library-inject.so, Lumen lua scripts, Steamless, SteamStub bypass, config.yaml
+        Downloads and installs slsteam-moon release by running its official
+        setup.sh: installs libs, creates the Steam wrapper
+        (~/.local/share/SLSsteam/path/steam) and patches desktop entries so
+        Steam launches through the injection wrapper.
         Does NOT install LuaTools plugin - we use Lumen with our custom lua overlay instead.
         """
         def log(msg: str):
@@ -120,32 +172,74 @@ class PluginManager:
                         with tempfile.TemporaryDirectory() as tmpdir:
                             zf.extractall(tmpdir)
                             # Find extracted folder (slsteam-moon-<version>-lumen/)
-                            extracted = Path(tmpdir)
-                            for item in extracted.iterdir():
+                            extracted = None
+                            for item in Path(tmpdir).iterdir():
                                 if item.is_dir() and item.name.startswith("slsteam-moon-"):
-                                    # Copy bin/ and res/ to SLS_DIR
-                                    bin_src = item / "bin"
-                                    res_src = item / "res"
-                                    tools_src = item / "tools"
-
-                                    if bin_src.exists():
-                                        shutil.copytree(bin_src, SLS_DIR / "bin", dirs_exist_ok=True)
-                                        shutil.copytree(bin_src, FLATPAK_SLS_DIR / "bin", dirs_exist_ok=True)
-                                    if res_src.exists():
-                                        shutil.copytree(res_src, SLS_DIR / "res", dirs_exist_ok=True)
-                                        shutil.copytree(res_src, FLATPAK_SLS_DIR / "res", dirs_exist_ok=True)
-                                    if tools_src.exists():
-                                        shutil.copytree(tools_src, SLS_DIR / "tools", dirs_exist_ok=True)
-                                        shutil.copytree(tools_src, FLATPAK_SLS_DIR / "tools", dirs_exist_ok=True)
+                                    extracted = item
                                     break
+                            if not extracted:
+                                log("Extracted release folder not found")
+                                return False
 
-                # Make binaries executable
-                for so_file in (SLS_DIR / "bin" / "SLSsteam.so", SLS_DIR / "bin" / "library-inject.so"):
-                    if so_file.exists():
-                        so_file.chmod(0o755)
+                            setup_script = extracted / "setup.sh"
+                            if setup_script.exists():
+                                # Official installer: creates the wrapper and
+                                # patches desktop entries (the critical part a
+                                # plain file copy cannot do).
+                                log("Running slsteam-moon setup.sh (wrapper + desktop coverage)...")
+                                env = cls._setup_env()
+                                proc = await asyncio.to_thread(
+                                    subprocess.run,
+                                    ["bash", str(setup_script), "install"],
+                                    cwd=str(extracted),
+                                    env=env,
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=600,
+                                )
+                                output = (proc.stdout or "") + (proc.stderr or "")
+                                if proc.returncode != 0:
+                                    log(f"setup.sh failed (exit {proc.returncode}):\n{output}")
+                                    return False
+                                for line in output.splitlines():
+                                    log(line)
+                                # Keep setup.sh for later uninstall
+                                shutil.copy2(setup_script, SLS_DIR / "setup.sh")
+                                (SLS_DIR / "setup.sh").chmod(0o755)
+                                # Mirror binaries to flatpak location as a best-effort copy
+                                for sub in ("bin", "res", "tools"):
+                                    src = SLS_DIR / sub
+                                    if src.exists():
+                                        shutil.copytree(src, FLATPAK_SLS_DIR / sub, dirs_exist_ok=True)
+                                for so_file in (SLS_DIR / "bin" / "SLSsteam.so", SLS_DIR / "bin" / "library-inject.so",
+                                                SLS_DIR / "SLSsteam.so", SLS_DIR / "library-inject.so"):
+                                    if so_file.exists():
+                                        so_file.chmod(0o755)
+                                log(f"✓ slsteam-moon {version} installed (wrapper + desktop coverage active)")
+                                return True
 
-                log(f"✓ slsteam-moon {version} installed to {SLS_DIR}")
-                return True
+                            # Fallback: release without setup.sh - plain file copy only
+                            log("setup.sh not found in release; doing plain file install (no desktop coverage)")
+                            bin_src = extracted / "bin"
+                            res_src = extracted / "res"
+                            tools_src = extracted / "tools"
+
+                            if bin_src.exists():
+                                shutil.copytree(bin_src, SLS_DIR / "bin", dirs_exist_ok=True)
+                                shutil.copytree(bin_src, FLATPAK_SLS_DIR / "bin", dirs_exist_ok=True)
+                            if res_src.exists():
+                                shutil.copytree(res_src, SLS_DIR / "res", dirs_exist_ok=True)
+                                shutil.copytree(res_src, FLATPAK_SLS_DIR / "res", dirs_exist_ok=True)
+                            if tools_src.exists():
+                                shutil.copytree(tools_src, SLS_DIR / "tools", dirs_exist_ok=True)
+                                shutil.copytree(tools_src, FLATPAK_SLS_DIR / "tools", dirs_exist_ok=True)
+
+                            for so_file in (SLS_DIR / "bin" / "SLSsteam.so", SLS_DIR / "bin" / "library-inject.so"):
+                                if so_file.exists():
+                                    so_file.chmod(0o755)
+
+                            log(f"✓ slsteam-moon {version} files installed to {SLS_DIR}")
+                            return True
 
         except Exception as e:
             log(f"✗ slsteam-moon installation failed: {e}")
@@ -267,11 +361,25 @@ class PluginManager:
 
     @classmethod
     async def uninstall_slsteam_moon(cls) -> bool:
-        """Removes slsteam-moon installation."""
+        """Removes slsteam-moon installation and restores desktop entries."""
         try:
-            for d in (SLS_DIR, FLATPAK_SLS_DIR):
-                if d.exists():
-                    shutil.rmtree(d, ignore_errors=True)
+            setup_script = SLS_DIR / "setup.sh"
+            if setup_script.exists():
+                env = cls._setup_env()
+                proc = await asyncio.to_thread(
+                    subprocess.run,
+                    ["bash", str(setup_script), "uninstall"],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                )
+                if proc.returncode != 0:
+                    logger.warning(f"setup.sh uninstall exited {proc.returncode}: {(proc.stderr or '')[:500]}")
+            else:
+                for d in (SLS_DIR, FLATPAK_SLS_DIR):
+                    if d.exists():
+                        shutil.rmtree(d, ignore_errors=True)
             # Clean Flatpak override
             subprocess.run(
                 ["flatpak", "override", "--user",
