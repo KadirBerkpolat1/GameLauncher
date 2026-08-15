@@ -186,8 +186,10 @@ class FixPickDialog(QDialog):
         item = QListWidgetItem()
         item.setData(Qt.ItemDataRole.UserRole, fix)
         item.setSizeHint(widget.sizeHint())
-        
-        # Set the widget on the item
+
+        # IMPORTANT: the item must be in the list BEFORE setItemWidget,
+        # otherwise Qt never attaches the widget and the row renders empty.
+        list_widget.addItem(item)
         list_widget.setItemWidget(item, widget)
         
         return item

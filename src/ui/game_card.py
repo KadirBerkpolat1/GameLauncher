@@ -597,7 +597,7 @@ class GameCard(QFrame):
             self.btn_apply_fix.setEnabled(True)
 
     def _uninstall_game(self) -> None:
-        from src.services.uninstall import UninstallManager
+        from src.services.uninstall import uninstall_game, UninstallError
         from PySide6.QtWidgets import QMessageBox
 
         reply = QMessageBox.question(
@@ -609,11 +609,15 @@ class GameCard(QFrame):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        success, error = UninstallManager.uninstall_game(self.app_id)
-        if success:
-            self.uninstalled.emit(self.app_id)
-        else:
-            QMessageBox.warning(self, "Error", f"Failed to uninstall: {error}")
+        try:
+            uninstall_game(self.app_id)
+        except UninstallError as e:
+            QMessageBox.warning(self, "Error", f"Failed to uninstall: {e}")
+            return
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to uninstall: {e}")
+            return
+        self.uninstalled.emit(self.app_id)
     def _launch_game(self) -> None:
         """Launches the game via Steam protocol."""
         import shutil
