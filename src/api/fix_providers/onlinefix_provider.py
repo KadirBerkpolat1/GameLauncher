@@ -46,6 +46,8 @@ class OnlineFixProvider(FixProvider):
         except Exception as e:
             logger.warning(f"OnlineFix search failed for '{query}': {e}")
             return []
+
+    async def download_fix(self, fix: FixInfo, dest_dir) -> str:
         """Download OnlineFix fix (requires hoster resolution)."""
         import tempfile
         from pathlib import Path
