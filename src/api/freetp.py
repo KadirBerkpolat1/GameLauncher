@@ -7,34 +7,13 @@ import html as html_lib
 from typing import Optional, Dict, Tuple
 from pathlib import Path
 
+from src.utils.fix_utils import (
+    extract_version,
+    normalize_string,
+    score_title_match,
+)
+
 FREETP_BASE = "https://freetp.org"
-
-# Extracts versions like v1.8.6, 1.8.6, build 1234
-_VERSION_RE = re.compile(r"(?:v\.?|version|build)?\s*(\d+(?:\.\d+)*[a-zA-Z]*)", re.IGNORECASE)
-
-
-def _score_title_match(query: str, title: str) -> int:
-    """Calculates relevance score. Exact title match yields highest score."""
-    clean_q = re.sub(r"[\W_]+", "", query.lower())
-    clean_t = re.sub(r"[\W_]+", "", html_lib.unescape(title).lower())
-
-    for suffix in [
-        "игратьпосетииинтернетуонлайн",
-        "игратьпосетибесплатноонлайн",
-        "игратьпосети",
-        "посетииинтернетуонлайн",
-        "посети",
-        "online"
-    ]:
-        clean_t = clean_t.replace(suffix, "")
-
-    if clean_t == clean_q:
-        return 1000  # Exact match!
-    if clean_t.startswith(clean_q):
-        return 500 - len(clean_t)
-    if clean_q in clean_t:
-        return 100 - len(clean_t)
-    return 0
 
 
 class FreeTPClient:
@@ -48,17 +27,6 @@ class FreeTPClient:
     async def close(self):
         await self._client.aclose()
 
-    def _normalize(self, s: str) -> str:
-        """Keep only alphanumerics for title matching."""
-        return re.sub(r"[\W_]+", "", s.lower())
-
-    def _extract_version(self, text: str) -> str:
-        """Finds the version string in a title, e.g. 'Chained Together v1.8.6' -> '1.8.6'"""
-        matches = _VERSION_RE.findall(text)
-        if matches:
-            return matches[-1]
-        return "0.0.0"
-
     async def search_game(self, query: str) -> Optional[Dict[str, str]]:
         """Searches FreeTP and returns the most relevant matched article info: url, version, title."""
         data = {
@@ -70,20 +38,20 @@ class FreeTPClient:
         try:
             resp = await self._client.post(f"{FREETP_BASE}/index.php?do=search", data=data)
             resp.raise_for_status()
-
             html = resp.content.decode('cp1251', errors='replace')
-            candidates = []
 
-            matches = re.finditer(
-                r'<div class="heading">.*?<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a></div>',
-                html,
-                re.IGNORECASE | re.DOTALL
+            # Search results: <a href="...html"><h2 class="title">Game Name</h2></a>
+            _SEARCH_ITEM_RE = re.compile(
+                r'<a href="(https://freetp\.org/[^"]+\.html)"><h2 class="title">\s*(.*?)\s*</h2></a>',
+                re.S,
             )
+            matches = _SEARCH_ITEM_RE.finditer(html)
+            candidates = []
             for m in matches:
                 url = m.group(1)
                 title = re.sub(r'<[^>]+>', '', m.group(2)).strip()
                 title = html_lib.unescape(title)
-                score = _score_title_match(query, title)
+                score = score_title_match(query, title)
                 if score > 0:
                     candidates.append((score, url, title))
 
@@ -99,10 +67,11 @@ class FreeTPClient:
             page_html = page_resp.content.decode('cp1251', errors='replace')
 
             version = "0.0.0"
-            title_match = re.search(r'<title[^>]*>(.*?)</title>', page_html, re.IGNORECASE | re.DOTALL)
+            _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+            title_match = _TITLE_RE.search(page_html)
             if title_match:
                 full_title = html_lib.unescape(title_match.group(1)).strip()
-                version = self._extract_version(full_title)
+                version = extract_version(full_title)
 
             if version == "0.0.0":
                 torrent_m = re.search(r'href=["\'][^"\']*?([^/"\']+\.torrent)["\']', page_html, re.IGNORECASE)
@@ -121,7 +90,7 @@ class FreeTPClient:
                 if v_match:
                     version = v_match.group(1)
                 else:
-                    version = self._extract_version(best_title)
+                    version = extract_version(best_title)
 
             return {"url": best_url, "version": version, "title": best_title}
         except Exception as e:
@@ -132,56 +101,43 @@ class FreeTPClient:
         """Downloads the fix .exe from the given article URL."""
         try:
             resp = await self._client.get(article_url)
-            html = resp.content.decode('cp1251', errors='replace')
+            resp.raise_for_status()
+            page_html = resp.content.decode('cp1251', errors='replace')
 
-            fix_link = None
-            getfile_links = []
-            matches = re.finditer(
-                r'<a[^>]+href=["\'](/getfile-[^"\']+)["\'][^>]*>(.*?)</a>',
-                html,
-                re.IGNORECASE | re.DOTALL
-            )
+            # Find download link - typically a torrent or direct link
+            _DOWNLOAD_RE = re.compile(r'href=["\']([^"\']*(?:download|torrent|fix)[^"\']*)["\']', re.IGNORECASE)
+            matches = _DOWNLOAD_RE.findall(page_html)
+            if not matches:
+                return None
+
+            # Prefer torrent files
+            download_url = None
             for m in matches:
-                href = m.group(1)
-                text = re.sub(r'<[^>]+>', '', m.group(2)).strip().lower()
-                getfile_links.append(href)
-                if "fix" in text or "фикс" in text or "multiplayer" in text:
-                    fix_link = href
+                if m.endswith('.torrent'):
+                    download_url = m
                     break
+            if not download_url:
+                download_url = matches[0]
 
-            if not fix_link:
-                if len(getfile_links) >= 2:
-                    fix_link = getfile_links[1]
-                elif len(getfile_links) == 1:
-                    fix_link = getfile_links[0]
-                else:
-                    return None
+            if not download_url.startswith('http'):
+                from urllib.parse import urljoin
+                download_url = urljoin(article_url, download_url)
 
-            download_page_url = FREETP_BASE + fix_link if fix_link.startswith('/') else fix_link
+            # Download the file
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_file = dest_dir / Path(download_url).name
 
-            dp_resp = await self._client.get(download_page_url)
-            dp_html = dp_resp.content.decode('cp1251', errors='replace')
-
-            m = re.search(r'name="id"\s+value="(\d+)"', dp_html)
-            if not m:
-                return None
-
-            file_id = m.group(1)
-            download_url = f"{FREETP_BASE}/engine/download.php?id={file_id}"
-
-            headers = {"Referer": download_page_url}
-            exe_resp = await self._client.get(download_url, headers=headers, follow_redirects=True)
-
-            if exe_resp.status_code != 200:
-                return None
-
-            dest_file = dest_dir / f"freetp_fix_{file_id}.exe"
-            dest_file.write_bytes(exe_resp.content)
+            async with self._client.stream("GET", download_url, timeout=60.0) as resp:
+                resp.raise_for_status()
+                with open(dest_file, "wb") as f:
+                    async for chunk in resp.aiter_bytes(8192):
+                        f.write(chunk)
 
             return dest_file
 
         except Exception as e:
             print(f"FreeTP download error: {e}")
             return None
+
 
 freetp_api = FreeTPClient()

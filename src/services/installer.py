@@ -64,9 +64,23 @@ class DDModInstaller:
     @classmethod
     async def uninstall_ddmod(cls) -> None:
         if cls.INSTALL_DIR.exists():
-            shutil.rmtree(cls.INSTALL_DIR)
-        from src.config.settings import SettingsManager
+            shutil.rmtree(cls.INSTALL_DIR, ignore_errors=True)
         SettingsManager.set("depotdownloadermod_path", "")
+
+    @classmethod
+    def run_installer_async(cls, progress_callback: callable, done_callback: callable) -> None:
+        """Runs DDMod update in background thread."""
+        import asyncio
+        from src.utils.async_utils import get_async_loop
+        
+        async def _task():
+            try:
+                result = await cls.update_ddmod()
+                done_callback(True, f"DDMod updated: {result}")
+            except Exception as e:
+                done_callback(False, f"DDMod update failed: {e}")
+        
+        asyncio.run_coroutine_threadsafe(_task(), get_async_loop())
 
 
 class SLSsteamInstaller:
@@ -102,8 +116,28 @@ class SLSsteamInstaller:
         for p in sls_paths:
             if p.exists() and p.is_dir():
                 shutil.rmtree(p, ignore_errors=True)
+        subprocess.run(
+            ["flatpak", "override", "--user",
+             "--unset-env=LD_AUDIT", "--unset-env=SHARED_LIBRARY_GUARD",
+             "com.valvesoftware.Steam"],
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
 
-        # Clean Flatpak override
+    @classmethod
+    def run_installer_async(cls, progress_callback: callable, done_callback: callable) -> None:
+        """Runs SLSsteam update in background thread."""
+        import asyncio
+        from src.utils.async_utils import get_async_loop
+        
+        async def _task():
+            try:
+                result = await cls.update_slssteam()
+                done_callback(True, f"SLSsteam updated: {result}")
+            except Exception as e:
+                done_callback(False, f"SLSsteam update failed: {e}")
+        
+        asyncio.run_coroutine_threadsafe(_task(), get_async_loop())
         import subprocess
         subprocess.run(
             ["flatpak", "override", "--user",

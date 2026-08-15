@@ -130,6 +130,38 @@ def create_appmanifest(steamapps_dir, game_data: dict, size_on_disk: int = 0) ->
                 os.unlink(tmp_path)
             except OSError:
                 pass
-        return ""
-
     return acf_path
+
+def get_installed_games() -> list:
+    """
+    Returns list of installed games from Steam library.
+    Reads appmanifest_*.acf files from all Steam library folders.
+    """
+    from src.utils.paths import get_steam_libraries
+    games = []
+    try:
+        for library in get_steam_libraries():
+            steamapps = Path(library) / "steamapps"
+            if not steamapps.exists():
+                continue
+            for acf_file in steamapps.glob("appmanifest_*.acf"):
+                try:
+                    import vdf
+                    with open(acf_file, "r", encoding="utf-8") as f:
+                        data = vdf.load(f)
+                    app_state = data.get("AppState", {})
+                    app_id = app_state.get("appid", "0")
+                    name = app_state.get("name", "Unknown")
+                    installdir = app_state.get("installdir", "")
+                    buildid = app_state.get("buildid", "0")
+                    games.append({
+                        "appid": int(app_id),
+                        "name": name,
+                        "installdir": installdir,
+                        "buildid": int(buildid),
+                    })
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return games
