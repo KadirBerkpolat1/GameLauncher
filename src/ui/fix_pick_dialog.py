@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QListWidget, QListWidgetItem,
-                                 QPushButton, QHBoxLayout)
+                                 QPushButton, QHBoxLayout, QTabWidget, QWidget, QScrollArea)
 from PySide6.QtCore import Qt
 
 class FixPickDialog(QDialog):
@@ -7,48 +7,23 @@ class FixPickDialog(QDialog):
         super().__init__(parent)
         self.fixes = fixes
         self.setWindowTitle("Select Patch Source")
-        self.resize(520, 260)
+        self.resize(600, 400)
         self.setStyleSheet("""
-            QDialog {
-                background-color: #161B22;
-                color: #C9D1D9;
-            }
-            QLabel {
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QListWidget {
-                background-color: #0D1117;
-                border: 1px solid #30363D;
-                border-radius: 6px;
-                padding: 5px;
-                font-size: 13px;
-                color: #C9D1D9;
-            }
-            QListWidget::item {
-                padding: 10px;
-                border-bottom: 1px solid #21262D;
-            }
-            QListWidget::item:selected {
-                background-color: #1F6FEB;
-                color: #ffffff;
-                border-radius: 4px;
-            }
-            QPushButton {
-                background-color: #238636;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #2EA043;
-            }
-            QPushButton:disabled {
-                background-color: #484F58;
-                color: #8B949E;
-            }
+            QDialog { background-color: #0D1117; color: #E6EDF3; }
+            QTabWidget::pane { border: 1px solid #30363D; background: #161B22; border-radius: 6px; }
+            QTabBar::tab { background: #0D1117; color: #8B949E; padding: 8px 16px; border: 1px solid #30363D; border-bottom: none; border-top-left-radius: 6px; border-top-right-radius: 6px; }
+            QTabBar::tab:selected { background: #161B22; color: #58A6FF; }
+            QTabBar::tab:hover { color: #E6EDF3; }
+            QListWidget { background-color: #161B22; border: 1px solid #30363D; border-radius: 6px; color: #E6EDF3; }
+            QListWidget::item { padding: 12px; border-bottom: 1px solid #21262D; }
+            QListWidget::item:selected { background-color: #1F6FEB; color: #FFFFFF; }
+            QListWidget::item:hover { background-color: #21262D; }
+            QPushButton { background-color: #238636; color: #FFFFFF; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; }
+            QPushButton:hover { background-color: #2EA043; }
+            QPushButton:disabled { background-color: #30363D; color: #8B949E; }
+            QPushButton[cssClass="SecondaryAction"] { background-color: #21262D; border: 1px solid #30363D; }
+            QPushButton[cssClass="SecondaryAction"]:hover { background-color: #30363D; }
+            QLabel { color: #E6EDF3; }
         """)
 
         layout = QVBoxLayout(self)
@@ -57,29 +32,64 @@ class FixPickDialog(QDialog):
         lbl.setStyleSheet("color: #FFFFFF; font-weight: 700; font-size: 14px;")
         layout.addWidget(lbl)
 
-        self.list_widget = QListWidget()
-        for i, fix in enumerate(self.fixes):
-            if fix["source"] == "freetp":
-                source = "FreeTP"
-            elif fix["source"] == "onlinefix":
-                source = "Online-Fix"
-            else:
-                source = "Goldberg"
-            ver = fix.get("version", "Unknown")
-            if ver == "0.0.0":
-                ver = "Unknown"
-            title = fix.get("title", "")
+        # Group fixes by source
+        self.fixes_by_source = {}
+        for fix in fixes:
+            source = fix.get("source", "unknown")
+            if source not in self.fixes_by_source:
+                self.fixes_by_source[source] = []
+            self.fixes_by_source[source].append(fix)
+
+        # Provider display names and icons
+        self.provider_info = {
+            "ryuu": {"name": "Ryuu", "icon": "🌙", "color": "#A371F7"},
+            "crackbypass": {"name": "CrackBypass", "icon": "🔓", "color": "#F85149"},
+            "onlinefix": {"name": "OnlineFix", "icon": "🌐", "color": "#3FB950"},
+            "freetp": {"name": "FreeTP", "icon": "🆓", "color": "#D29922"},
+            "goldberg": {"name": "Goldberg", "icon": "🎮", "color": "#58A6FF"},
+        }
+
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setDocumentMode(True)
+        
+        self.all_list_widgets = []
+        
+        for source, source_fixes in self.fixes_by_source.items():
+            info = self.provider_info.get(source, {"name": source.capitalize(), "icon": "📦", "color": "#8B949E"})
+            tab_name = f"{info['icon']}  {info['name']} ({len(source_fixes)})"
             
-            # Mark the highest version as Recommended
-            rec_text = " (Recommended)" if i == 0 else ""
+            tab_widget = QWidget()
+            tab_layout = QVBoxLayout(tab_widget)
+            tab_layout.setContentsMargins(8, 8, 8, 8)
             
-            item_text = f"[{source}] Version: {ver}{rec_text}\n{title}"
-            item = QListWidgetItem(item_text)
-            # Seçimi tutmak için index kaydedelim
-            item.setData(Qt.ItemDataRole.UserRole, fix)
-            self.list_widget.addItem(item)
+            # Add info label
+            if source_fixes:
+                # Show best version
+                best = source_fixes[0]
+                version = best.get("version", "1.0.0")
+                badges = best.get("badges", [])
+                badge_text = " ".join([f"[{b}]" for b in badges])
+                if badge_text:
+                    info_label = QLabel(f"Best: v{version} {badge_text}")
+                else:
+                    info_label = QLabel(f"Best: v{version}")
+                info_label.setStyleSheet(f"color: {info['color']}; font-size: 11px; font-weight: 600;")
+                tab_layout.addWidget(info_label)
             
-        layout.addWidget(self.list_widget)
+            list_widget = QListWidget()
+            list_widget.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+            
+            for fix in source_fixes:
+                item = self._create_fix_item(fix, source, info)
+                list_widget.addItem(item)
+            
+            self.all_list_widgets.append((list_widget, source))
+            tab_layout.addWidget(list_widget)
+            
+            self.tab_widget.addTab(tab_widget, tab_name)
+        
+        layout.addWidget(self.tab_widget)
 
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
@@ -88,10 +98,8 @@ class FixPickDialog(QDialog):
         self.btn_select.setEnabled(False)
         self.btn_select.clicked.connect(self.accept)
         
-        self.list_widget.itemSelectionChanged.connect(self._on_selection_changed)
-
         btn_cancel = QPushButton("Cancel")
-        btn_cancel.setStyleSheet("background-color: #21262D; color: #C9D1D9; border: 1px solid #30363D;")
+        btn_cancel.setProperty("cssClass", "SecondaryAction")
         btn_cancel.clicked.connect(self.reject)
 
         btn_layout.addWidget(btn_cancel)
@@ -99,14 +107,63 @@ class FixPickDialog(QDialog):
 
         layout.addLayout(btn_layout)
         
-        if self.fixes:
-            self.list_widget.setCurrentRow(0)
+        # Connect selection changed for all list widgets
+        for list_widget, _ in self.all_list_widgets:
+            list_widget.itemSelectionChanged.connect(self._on_selection_changed)
+        
+        # Select first item in first tab
+        if self.all_list_widgets:
+            first_list = self.all_list_widgets[0][0]
+            if first_list.count() > 0:
+                first_list.setCurrentRow(0)
+
+    def _create_fix_item(self, fix: dict, source: str, info: dict) -> QListWidgetItem:
+        """Create a list item with fix details and badges."""
+        title = fix.get("title", "Unknown Fix")
+        version = fix.get("version", "1.0.0")
+        badges = fix.get("badges", [])
+        url = fix.get("url", "")
+        
+        # Build display text
+        badge_html = ""
+        for badge in badges:
+            badge_lower = badge.lower()
+            if "online" in badge_lower:
+                badge_html += f'<span style="background:#3FB950;color:#000;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+            elif "bypass" in badge_lower:
+                badge_html += f'<span style="background:#D29922;color:#000;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+            elif "crack" in badge_lower:
+                badge_html += f'<span style="background:#F85149;color:#FFF;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+            elif "dlc" in badge_lower:
+                badge_html += f'<span style="background:#58A6FF;color:#FFF;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+            else:
+                badge_html += f'<span style="background:#30363D;color:#FFF;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+        
+        display_text = (
+            f'<b style="color:#E6EDF3;">{title}</b>'
+            f'<span style="color:#8B949E;margin-left:8px;">v{version}</span>'
+            f'<div style="margin-top:4px;">{badge_html}</div>'
+        )
+        
+        item = QListWidgetItem()
+        item.setData(Qt.ItemDataRole.UserRole, fix)
+        item.setText(display_text)
+        item.setTextAlignment(Qt.AlignmentFlag.AlignLeft)
+        return item
 
     def _on_selection_changed(self):
-        self.btn_select.setEnabled(bool(self.list_widget.selectedItems()))
+        """Enable install button if any item is selected in any tab."""
+        has_selection = False
+        for list_widget, _ in self.all_list_widgets:
+            if list_widget.selectedItems():
+                has_selection = True
+                break
+        self.btn_select.setEnabled(has_selection)
 
     def get_selected_fix(self) -> dict:
-        items = self.list_widget.selectedItems()
-        if items:
-            return items[0].data(Qt.ItemDataRole.UserRole)
+        """Get the selected fix from any tab."""
+        for list_widget, source in self.all_list_widgets:
+            items = list_widget.selectedItems()
+            if items:
+                return items[0].data(Qt.ItemDataRole.UserRole)
         return None

@@ -122,14 +122,35 @@ class GameCard(QFrame):
             mode = SettingsManager.get("steam_integration_mode", "classic")
             
             if mode == "moon":
+                # Moon mode: Multiple action buttons
+                moon_btn_layout = QVBoxLayout()
+                moon_btn_layout.setSpacing(6)
+                
+                # Main action: Add to Steam
                 self.btn_download = QPushButton("➕ Add to Steam (Moon)")
+                self.btn_download.setProperty("cssClass", "PrimaryAction")
+                self.btn_download.clicked.connect(self._add_to_library)
+                moon_btn_layout.addWidget(self.btn_download)
+                
+                # Secondary: Add + Fix (Moon)
+                self.btn_add_fix = QPushButton("🔧 Add + Fix (Moon)")
+                self.btn_add_fix.setProperty("cssClass", "SecondaryAction")
+                self.btn_add_fix.clicked.connect(self._add_to_library_with_fix)
+                moon_btn_layout.addWidget(self.btn_add_fix)
+                
+                # Tertiary: Add + DLC (Moon) - only show if DLCs available
+                self.btn_add_dlc = QPushButton("📦 Add + DLC (Moon)")
+                self.btn_add_dlc.setProperty("cssClass", "SecondaryAction")
+                self.btn_add_dlc.clicked.connect(self._add_to_library_with_dlc)
+                self.btn_add_dlc.setVisible(False)  # Hidden by default, shown when DLCs detected
+                moon_btn_layout.addWidget(self.btn_add_dlc)
+                
+                btn_container.addLayout(moon_btn_layout)
             else:
                 self.btn_download = QPushButton("➕ Add to Library")
-                
-            self.btn_download.setProperty("cssClass", "PrimaryAction")
-            self.btn_download.clicked.connect(self._add_to_library)
-            btn_container.addWidget(self.btn_download)
-
+                self.btn_download.setProperty("cssClass", "PrimaryAction")
+                self.btn_download.clicked.connect(self._add_to_library)
+                btn_container.addWidget(self.btn_download)
         elif self.mode == "library":
             installed_path = getattr(self, '_installed_path', None)
 
@@ -352,6 +373,108 @@ class GameCard(QFrame):
             self.btn_download.setText("Error")
             self.btn_download.setEnabled(True)
             print(f"Error adding to library: {e}")
+
+    async def _async_add_to_library_with_fix(self) -> None:
+        """Moon mode: Inject Lua with fix pre-selected, then open Steam install."""
+        try:
+            from src.config.settings import SettingsManager
+            from src.services.download import DownloadManager
+            
+            # First, inject Lua
+            success = await DownloadManager.inject_lua_to_steam(self.app_id)
+            if not success:
+                raise Exception("Failed to inject Lua into Steam.")
+            
+            # Fetch available fixes
+            from src.api.unified_fix import UnifiedFixFetcher
+            fixes = await UnifiedFixFetcher.get_available_fixes(self.title)
+            
+            if fixes:
+                # Add Goldberg option
+                fixes.append({
+                    "source": "goldberg",
+                    "title": "Remove Steam DRM (Singleplayer / Offline Only)",
+                    "version": "Auto",
+                    "url": ""
+                })
+                
+                from src.ui.fix_pick_dialog import FixPickDialog
+                from PySide6.QtWidgets import QDialog
+                dlg = FixPickDialog(fixes, self)
+                if dlg.exec() == QDialog.DialogCode.Accepted:
+                    best_fix = dlg.get_selected_fix()
+                    if best_fix:
+                        source = best_fix["source"]
+                        # Download and apply fix to temp, then Steam will pick it up
+                        # For Moon mode, the fix will be applied via launch options
+                        from src.config.slssteam import SLSsteamConfigManager
+                        SLSsteamConfigManager().apply_fix_launch_options(self.app_id, source)
+            
+            # Update button state
+            self.btn_add_fix.setText("✓ Fix Ready")
+            self.btn_add_fix.setStyleSheet("background-color: #059669; color: white;")
+            
+            # Open Steam install
+            import subprocess
+            subprocess.Popen(["xdg-open", f"steam://install/{self.app_id}"], start_new_session=True)
+            QMessageBox.information(self, "Moon Engine + Fix", 
+                f"{self.title} injected to Steam with fix pre-configured.\nSteam download dialog should open automatically.")
+                
+        except Exception as e:
+            self.btn_add_fix.setText("Error")
+            self.btn_add_fix.setEnabled(True)
+            print(f"Error adding with fix: {e}")
+
+    async def _async_add_to_library_with_dlc(self) -> None:
+        """Moon mode: Inject Lua + open Steam install with DLCs."""
+        try:
+            from src.config.settings import SettingsManager
+            from src.services.download import DownloadManager
+            
+            # Inject Lua
+            success = await DownloadManager.inject_lua_to_steam(self.app_id)
+            if not success:
+                raise Exception("Failed to inject Lua into Steam.")
+            
+            # Fetch game data with DLCs
+            game_data = await DownloadManager.prepare_game_data(self.app_id, scope="full")
+            dlcs = game_data.get("dlcs", {})
+            
+            if dlcs:
+                # Build steam://install URL with DLCs
+                dlc_ids = ",".join(str(dlc_id) for dlc_id in dlcs.keys())
+                install_url = f"steam://install/{self.app_id},{dlc_ids}"
+            else:
+                install_url = f"steam://install/{self.app_id}"
+            
+            # Update button state
+            self.btn_add_dlc.setText("✓ DLC Ready")
+            self.btn_add_dlc.setStyleSheet("background-color: #059669; color: white;")
+            
+            # Open Steam install with DLCs
+            import subprocess
+            subprocess.Popen(["xdg-open", install_url], start_new_session=True)
+            QMessageBox.information(self, "Moon Engine + DLC", 
+                f"{self.title} injected to Steam with {len(dlcs)} DLC(s).\nSteam download dialog should open automatically.")
+                
+        except Exception as e:
+            self.btn_add_dlc.setText("Error")
+            self.btn_add_dlc.setEnabled(True)
+            print(f"Error adding with DLC: {e}")
+    def _add_to_library_with_fix(self) -> None:
+        """Sync wrapper for async _async_add_to_library_with_fix."""
+        self.btn_add_fix.setText("Processing...")
+        self.btn_add_fix.setEnabled(False)
+        loop = get_async_loop()
+        loop.create_task(self._async_add_to_library_with_fix())
+
+    def _add_to_library_with_dlc(self) -> None:
+        """Sync wrapper for async _async_add_to_library_with_dlc."""
+        self.btn_add_dlc.setText("Processing...")
+        self.btn_add_dlc.setEnabled(False)
+        loop = get_async_loop()
+        loop.create_task(self._async_add_to_library_with_dlc())
+
     def _request_download(self) -> None:
         from src.config.settings import SettingsManager
         mode = SettingsManager.get("steam_integration_mode", "classic")

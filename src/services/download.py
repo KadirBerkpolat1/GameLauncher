@@ -294,6 +294,7 @@ class DownloadManager:
             "installdir": info.get("installdir") or parsed.get("installdir"),
             "buildid": info.get("buildid") or "",
             "depots": depots,
+            "dlcs": parsed.get("dlcs", {}),  # Include DLCs
             "manifests": {
                 depot_id: d.get("manifest_id")
                 for depot_id, d in depots.items()
@@ -307,7 +308,6 @@ class DownloadManager:
             parsed["installdir"] = info["installdir"]
 
         return game_data
-
     @staticmethod
     async def inject_lua_to_steam(app_id: int) -> bool:
         """

@@ -348,36 +348,66 @@ class DownloadTask:
         # Executable permissions for Linux binaries.
         self._set_linux_binary_permissions()
 
-        # Auto-apply fix if applicable
+        # Auto-apply fix if applicable - try all providers in priority order
         try:
             provider = SettingsManager.get("manifest_provider", "auto")
-            if provider in ("auto", "ryuu") and self.download_dir:
-                from src.api.ryuu import ryuu_api
+            if provider in ("auto", "ryuu", "crackbypass", "onlinefix", "freetp") and self.download_dir:
+                from src.api.unified_fix import UnifiedFixFetcher
                 from src.utils.onlinefix_patcher import OnlineFixPatcher
                 from src.config.slssteam import SLSsteamConfigManager
                 import httpx
+                import tempfile
+                from pathlib import Path
                 
-                logger.info(f"Checking for auto-fix from Ryuu for {self.title}...")
-                fixes = await ryuu_api.get_available_fixes(self.title)
+                logger.info(f"Checking for auto-fix for {self.title}...")
+                fixes = await UnifiedFixFetcher.get_available_fixes(self.title)
+                
                 if fixes:
-                    # Just grab the best/first fix from Ryuu
-                    best_fix = fixes[0]
-                    url = best_fix["url"]
-                    logger.info(f"Auto-applying Ryuu fix from {url}...")
-                    dest = Path(tempfile.gettempdir()) / f"ryuu_autofix_{self.app_id}.zip"
-                    headers = {}
-                    ryuu_key = SettingsManager.get("ryuu_api_key", "").strip()
-                    if ryuu_key:
-                        headers["X-Auth-Key"] = ryuu_key
-                    async with httpx.AsyncClient(follow_redirects=True, timeout=120.0, headers=headers) as client:
-                        resp = await client.get(url)
-                        if resp.status_code == 200:
-                            dest.write_bytes(resp.content)
-                            OnlineFixPatcher.apply_patch_from_archive(str(dest), str(self.app_id), str(self.download_dir), password="")
-                            logger.info(f"Successfully auto-applied Ryuu fix for {self.title}.")
-                            
-                            # Apply launch options so fix works from Steam client without restart
-                            SLSsteamConfigManager().apply_fix_launch_options(self.app_id, "ryuu")
+                    # Try each fix in priority order (already sorted by badge/version)
+                    for fix in fixes:
+                        source = fix.get("source", "")
+                        if source == "goldberg":
+                            continue  # Skip Goldberg for auto-fix
+                        
+                        url = fix.get("url", "")
+                        if not url:
+                            continue
+                        
+                        logger.info(f"Attempting auto-fix from {source} for {self.title}...")
+                        dest = Path(tempfile.gettempdir()) / f"autofix_{source}_{self.app_id}.zip"
+                        
+                        headers = {}
+                        if source == "ryuu":
+                            ryuu_key = SettingsManager.get("ryuu_api_key", "").strip()
+                            if ryuu_key:
+                                headers["X-Auth-Key"] = ryuu_key
+                        
+                        try:
+                            async with httpx.AsyncClient(follow_redirects=True, timeout=120.0, headers=headers) as client:
+                                resp = await client.get(url)
+                                if resp.status_code == 200:
+                                    dest.write_bytes(resp.content)
+                                    
+                                    # Apply fix based on source
+                                    if source == "freetp":
+                                        # FreeTP is an .exe installer
+                                        OnlineFixPatcher.apply_freetp_exe(str(dest), str(self.app_id), str(self.download_dir))
+                                    else:
+                                        # Ryuu, CrackBypass, OnlineFix are archives
+                                        OnlineFixPatcher.apply_patch_from_archive(str(dest), str(self.app_id), str(self.download_dir), password="")
+                                    
+                                    logger.info(f"Successfully auto-applied {source} fix for {self.title}.")
+                                    
+                                    # Apply launch options so fix works from Steam client without restart
+                                    SLSsteamConfigManager().apply_fix_launch_options(self.app_id, source)
+                                    break  # Success, stop trying other fixes
+                                else:
+                                    logger.warning(f"{source} fix download failed: HTTP {resp.status_code}")
+                        except Exception as e:
+                            logger.warning(f"Failed to apply {source} fix: {e}")
+                            continue
+                    else:
+                        logger.info(f"No working auto-fix found for {self.title} from any provider")
         except Exception as e:
             logger.error(f"Failed to auto-apply fix: {e}")
 
