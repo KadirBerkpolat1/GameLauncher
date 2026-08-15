@@ -1,10 +1,12 @@
 import asyncio
-from typing import Dict, Optional, Tuple
+import logging
+from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 
-from src.api.onlinefix import onlinefix_api
-from src.api.freetp import freetp_api
-from src.api.ryuu import ryuu_api
+from src.api.fix_providers import provider_registry, register_default_providers, FixInfo
+
+logger = logging.getLogger(__name__)
+
 def parse_version(v: str) -> tuple:
     """Parses a version string into a tuple of ints/strings for comparison."""
     import re
@@ -17,66 +19,60 @@ def parse_version(v: str) -> tuple:
             parsed.append(p)
     return tuple(parsed)
 
+
 class UnifiedFixFetcher:
     @staticmethod
-    async def get_available_fixes(game_name: str) -> list:
+    async def get_available_fixes(game_name: str) -> List[Dict]:
         """
-        Searches Ryuu, Online-Fix, and FreeTP for the game.
-        Returns a list of dictionaries with keys: 'source', 'title', 'version', 'url'.
+        Searches all registered fix providers for the game.
+        Returns a list of dictionaries with keys: 'source', 'title', 'version', 'url', 'badges', 'metadata'.
         """
+        # Ensure providers are registered
+        register_default_providers()
+        
         import re
         # Oyun isminin sonundaki ".53" gibi eklentileri temizle (PEAK.53 -> PEAK)
         search_query = re.sub(r'\.\d+$', '', game_name).strip()
         
-        of_task = onlinefix_api.search_game(search_query, limit=10)
-        ft_task = freetp_api.search_game(search_query)
-        ryuu_task = ryuu_api.get_available_fixes(search_query)
-
-        of_results, ft_result, ryuu_res = await asyncio.gather(of_task, ft_task, ryuu_task, return_exceptions=True)
-
-        fixes = []
-
-        async def _process_results(of_res, ft_res, r_res):
-            if not isinstance(r_res, Exception) and r_res:
-                fixes.extend(r_res)
-                
-            if not isinstance(of_res, Exception) and of_res:
-                of_best = of_res[0]
-                try:
-                    page_info = await onlinefix_api.get_game_page(of_best["url"])
-                    of_best["version"] = page_info.get("version", of_best.get("version", "0.0.0"))
-                except Exception:
-                    pass
-                of_best["source"] = "onlinefix"
-                fixes.append(of_best)
-                
-            if not isinstance(ft_res, Exception) and ft_res:
-                ft_best = ft_res
-                ft_best["source"] = "freetp"
-                fixes.append(ft_best)
-
-        await _process_results(of_results, ft_result, ryuu_res)
+        fixes: List[FixInfo] = await provider_registry.search_all(search_query)
         
-        # Eğer iki siteden de hicbir sonuc donmediyse ismin icindeki noktalama/rakamlari 
-        # silip (ornegin PEAK.53 -> PEAK) tekrar kaba bir arama yapalim.
-        # Eger yama bulunamadiysa ve isimde hala rakam vb varsa, genisletilmis arama yapabiliriz.
-        # Ancak flood control (15sn) yuzunden pes pese arama yaparsak OnlineFix bos doner.
-        if not fixes:
+        # Convert FixInfo objects to dict format for backward compatibility
+        result = []
+        for fix in fixes:
+            result.append({
+                "source": fix.source,
+                "title": fix.title,
+                "version": fix.version,
+                "url": fix.url,
+                "badges": fix.badges,
+                "metadata": fix.metadata,
+            })
+        
+        # Fallback: if no results, try broad search like before
+        if not result:
             clean_name = re.sub(r'[^a-zA-Z\s]', '', search_query).strip()
             if clean_name and clean_name != search_query:
-                # OnlineFix flood control e takilabilir, ama FreeTP takilmaz.
-                of_task2 = onlinefix_api.search_game(clean_name, limit=10)
-                ft_task2 = freetp_api.search_game(clean_name)
-                r_task2 = ryuu_api.get_available_fixes(clean_name)
-                of_res2, ft_res2, r_res2 = await asyncio.gather(of_task2, ft_task2, r_task2, return_exceptions=True)
-                await _process_results(of_res2, ft_res2, r_res2)
-
-        # Sort fixes so the highest version comes first
-        def get_ver_tuple(fix):
-            try:
-                return parse_version(fix.get("version", "0.0.0"))
-            except:
-                return (0,)
-                
-        fixes.sort(key=get_ver_tuple, reverse=True)
-        return fixes
+                logger.info(f"UnifiedFixFetcher: No results for '{search_query}', trying broad search '{clean_name}'")
+                fixes2 = await provider_registry.search_all(clean_name)
+                for fix in fixes2:
+                    result.append({
+                        "source": fix.source,
+                        "title": fix.title,
+                        "version": fix.version,
+                        "url": fix.url,
+                        "badges": fix.badges,
+                        "metadata": fix.metadata,
+                    })
+        
+        # Add Goldberg as explicit offline choice
+        result.append({
+            "source": "goldberg",
+            "title": "Remove Steam DRM (Singleplayer / Offline Only)",
+            "version": "Auto",
+            "url": "",
+            "badges": ["Offline"],
+            "metadata": {},
+        })
+        
+        logger.info(f"UnifiedFixFetcher: Returning {len(result)} fixes for '{game_name}'")
+        return result

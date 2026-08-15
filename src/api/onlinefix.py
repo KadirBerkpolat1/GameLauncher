@@ -109,10 +109,10 @@ class OnlineFixClient:
             url = SEARCH_URL.format(query=quote(query))
             resp = await client.get(url)
             resp.raise_for_status()
-            html = resp.text
+            html_content = resp.text
 
             items = []
-            for m in _SEARCH_ITEM_RE.finditer(html):
+            for m in _SEARCH_ITEM_RE.finditer(html_content):
                 url_match = m.group(1)
                 title = html.unescape(m.group(2)).strip()
                 if search_match(query, url_match, title):

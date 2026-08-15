@@ -1,6 +1,9 @@
+import logging
 import vdf
 from pathlib import Path
 from typing import Dict, Any
+
+logger = logging.getLogger(__name__)
 
 class VDFParserError(Exception):
     pass
@@ -124,8 +127,8 @@ class LocalConfigManager:
                         paths.append(d)
         return paths
 
-    def update_launch_options(self, app_id: str):
-        launch_opts = 'WINEDLLOVERRIDES="custom=n;onlinefix64=n;steam_api64=n;winmm=n,b" %command%'
+    def get_launch_options(self, app_id: str) -> str:
+        """Get current launch options for an app."""
         for user_dir in self.userdata_paths:
             config_file = user_dir / "config" / "localconfig.vdf"
             if not config_file.exists():
@@ -135,16 +138,37 @@ class LocalConfigManager:
                 with open(config_file, 'r', encoding='utf-8') as f:
                     data = vdf.load(f)
                 
-                node = data.setdefault("UserLocalConfigStore", {}).setdefault("Software", {}).setdefault("Valve", {}).setdefault("Steam", {}).setdefault("apps", {}).setdefault(str(app_id), {})
+                node = data.get("UserLocalConfigStore", {}).get("Software", {}).get("Valve", {}).get("Steam", {}).get("apps", {}).get(str(app_id), {})
+                return node.get("LaunchOptions", "")
+            except Exception:
+                pass
+        return ""
+
+    def set_launch_options(self, app_id: str, launch_options: str) -> bool:
+        """Set launch options for an app across all userdata profiles."""
+        updated = False
+        for user_dir in self.userdata_paths:
+            config_file = user_dir / "config" / "localconfig.vdf"
+            if not config_file.exists():
+                continue
+            
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    data = vdf.load(f)
                 
-                existing_opts = node.get("LaunchOptions", "")
-                if launch_opts not in existing_opts:
-                    if existing_opts:
-                        node["LaunchOptions"] = f'{existing_opts} {launch_opts}'
-                    else:
-                        node["LaunchOptions"] = launch_opts
+                apps_node = data.setdefault("UserLocalConfigStore", {}).setdefault("Software", {}).setdefault("Valve", {}).setdefault("Steam", {}).setdefault("apps", {})
+                app_node = apps_node.setdefault(str(app_id), {})
+                
+                app_node["LaunchOptions"] = launch_options
                 
                 with open(config_file, 'w', encoding='utf-8') as f:
                     vdf.dump(data, f, pretty=True)
-            except Exception:
-                pass
+                updated = True
+            except Exception as e:
+                logger.warning(f"Failed to set launch options for {app_id}: {e}")
+        return updated
+
+    def update_launch_options(self, app_id: str):
+        """Legacy method - adds WINEDLLOVERRIDES for fix compatibility."""
+        launch_opts = 'WINEDLLOVERRIDES="custom=n;onlinefix64=n;steam_api64=n;winmm=n,b" %command%'
+        self.set_launch_options(app_id, launch_opts)

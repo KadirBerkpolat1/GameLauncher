@@ -406,7 +406,6 @@ class GameCard(QFrame):
                 self.btn_apply_fix.setText("🔧 Fix")
                 self.btn_apply_fix.setEnabled(True)
                 return
-
             source = best_fix["source"]
             self.btn_apply_fix.setText(f"Applying ({source})...")
 
@@ -445,6 +444,17 @@ class GameCard(QFrame):
                         OnlineFixPatcher.apply_patch(str(self.app_id), target_path)
                 else:
                     OnlineFixPatcher.apply_patch(str(self.app_id), target_path)
+            elif source == "crackbypass":
+                # Use the new provider interface
+                from src.api.crackbypass import crackbypass_api
+                import tempfile
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    extracted = await crackbypass_api.download_fix(best_fix, tmpdir)
+                    if extracted:
+                        from src.utils.onlinefix_patcher import OnlineFixPatcher
+                        OnlineFixPatcher.apply_patch_from_archive(extracted, str(self.app_id), target_path)
+                    else:
+                        OnlineFixPatcher.apply_patch(str(self.app_id), target_path)
             else:
                 dest_dir = Path(tempfile.gettempdir())
                 dest_file = await freetp_api.download_fix(best_fix["url"], dest_dir)
@@ -453,15 +463,14 @@ class GameCard(QFrame):
                 else:
                     OnlineFixPatcher.apply_patch(str(self.app_id), target_path)
 
+            # Apply launch options so fix works from Steam client without restart
+            from src.config.slssteam import SLSsteamConfigManager
+            SLSsteamConfigManager().apply_fix_launch_options(self.app_id, source)
+
             QMessageBox.information(
                 self, "Success",
-                f"Fix ({source}) applied successfully!\nClick 'Restart Steam' on the sidebar when you want to reload changes."
+                f"Fix ({source}) applied successfully!\nLaunch options updated - no Steam restart needed!"
             )
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to apply fix: {e}")
-        finally:
-            self.btn_apply_fix.setText("🔧 Fix")
-            self.btn_apply_fix.setEnabled(True)
 
     def _uninstall_game(self) -> None:
         from src.services.uninstall import UninstallManager

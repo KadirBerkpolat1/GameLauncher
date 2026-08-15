@@ -348,12 +348,13 @@ class DownloadTask:
         # Executable permissions for Linux binaries.
         self._set_linux_binary_permissions()
 
-        # Auto-apply Ryuu fix if applicable
+        # Auto-apply fix if applicable
         try:
             provider = SettingsManager.get("manifest_provider", "auto")
             if provider in ("auto", "ryuu") and self.download_dir:
                 from src.api.ryuu import ryuu_api
                 from src.utils.onlinefix_patcher import OnlineFixPatcher
+                from src.config.slssteam import SLSsteamConfigManager
                 import httpx
                 
                 logger.info(f"Checking for auto-fix from Ryuu for {self.title}...")
@@ -374,8 +375,11 @@ class DownloadTask:
                             dest.write_bytes(resp.content)
                             OnlineFixPatcher.apply_patch_from_archive(str(dest), str(self.app_id), str(self.download_dir), password="")
                             logger.info(f"Successfully auto-applied Ryuu fix for {self.title}.")
+                            
+                            # Apply launch options so fix works from Steam client without restart
+                            SLSsteamConfigManager().apply_fix_launch_options(self.app_id, "ryuu")
         except Exception as e:
-            logger.error(f"Failed to auto-apply Ryuu fix: {e}")
+            logger.error(f"Failed to auto-apply fix: {e}")
 
 
     def _set_linux_binary_permissions(self):

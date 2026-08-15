@@ -212,13 +212,53 @@ class PluginManager:
                             if lua_src.exists():
                                 shutil.copytree(lua_src, LUMEN_DIR / "lua", dirs_exist_ok=True)
                                 log(f"✓ lumen lua scripts installed to {LUMEN_DIR}/lua")
+                            
+                            # Overlay Nebula custom lua files
+                            await cls._overlay_nebula_lumen_custom(LUMEN_DIR, log)
 
                 log(f"✓ lumen {version} installed")
                 return True
-
         except Exception as e:
             log(f"✗ lumen installation failed: {e}")
             return False
+
+    @classmethod
+    async def _overlay_nebula_lumen_custom(cls, lumen_dir: Path, log_callback) -> None:
+        """Overlay Nebula custom Lua files onto installed Lumen."""
+        import shutil
+        from pathlib import Path
+        
+        custom_dir = Path(__file__).parent.parent.parent / "lumen_custom"
+        if not custom_dir.exists():
+            log_callback(f"  Nebula custom lua not found at {custom_dir}, skipping overlay")
+            return
+        
+        try:
+            # Copy custom fixesmenu.lua
+            fixesmenu_src = custom_dir / "fixesmenu.lua"
+            if fixesmenu_src.exists():
+                shutil.copy2(fixesmenu_src, lumen_dir / "lua" / "fixesmenu.lua")
+                log_callback(f"  ✓ Overlayed fixesmenu.lua")
+            
+            # Copy custom slsmenu.lua
+            slsmenu_src = custom_dir / "slsmenu.lua"
+            if slsmenu_src.exists():
+                shutil.copy2(slsmenu_src, lumen_dir / "lua" / "slsmenu.lua")
+                log_callback(f"  ✓ Overlayed slsmenu.lua")
+            
+            # Copy custom menu styles
+            menu_custom_dir = custom_dir / "menu"
+            if menu_custom_dir.exists():
+                target_menu_dir = lumen_dir / "lua" / "menu"
+                target_menu_dir.mkdir(parents=True, exist_ok=True)
+                for file in menu_custom_dir.glob("*.lua"):
+                    shutil.copy2(file, target_menu_dir / file.name)
+                    log_callback(f"  ✓ Overlayed menu/{file.name}")
+            
+            log_callback(f"  ✓ Nebula Lumen customization applied")
+            
+        except Exception as e:
+            log_callback(f"  ✗ Failed to overlay Nebula custom lua: {e}")
 
     @classmethod
     async def uninstall_slsteam_moon(cls) -> bool:
