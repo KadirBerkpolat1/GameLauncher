@@ -142,56 +142,41 @@ class FixPickDialog(QDialog):
             list_widget.itemSelectionChanged.connect(self._on_selection_changed)
 
     def _create_fix_item(self, fix: dict, source: str, info: dict, list_widget) -> QListWidgetItem:
-        """Create a list item with fix details and badges using rich text widget."""
+        """Create a list item with fix details and badges using rich text."""
         title = fix.get("title", "Unknown Fix")
         version = fix.get("version", "1.0.0")
         badges = fix.get("badges", [])
-        
-        # Create a widget for rich text display
-        from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
-        from PySide6.QtCore import Qt
-        
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(4)
-        
-        # Title and version
-        title_label = QLabel(f'<b style="color:#E6EDF3;">{title}</b> <span style="color:#8B949E;">{version}</span>')
-        title_label.setTextFormat(Qt.TextFormat.RichText)
-        title_label.setWordWrap(True)
-        layout.addWidget(title_label)
-        
-        # Badges
+
+        # Use the list's native rich-text rendering instead of setItemWidget:
+        # item widgets fail to attach (empty rows) or get wrong sizes
+        # (clipped/invisible text) across Qt versions and screen scales.
+        html = f'<b style="color:#E6EDF3;">{title}</b> <span style="color:#8B949E;">{version}</span>'
         if badges:
             badge_html = ""
             for badge in badges:
                 badge_lower = badge.lower()
                 if "online" in badge_lower:
-                    badge_html += f'<span style="background:#3FB950;color:#000;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+                    badge_html += f'<span style="color:#3FB950;font-weight:700;"> [{badge}]</span>'
                 elif "bypass" in badge_lower:
-                    badge_html += f'<span style="background:#D29922;color:#000;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+                    badge_html += f'<span style="color:#D29922;font-weight:700;"> [{badge}]</span>'
                 elif "crack" in badge_lower:
-                    badge_html += f'<span style="background:#F85149;color:#FFF;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+                    badge_html += f'<span style="color:#F85149;font-weight:700;"> [{badge}]</span>'
                 elif "dlc" in badge_lower:
-                    badge_html += f'<span style="background:#58A6FF;color:#FFF;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+                    badge_html += f'<span style="color:#58A6FF;font-weight:700;"> [{badge}]</span>'
                 else:
-                    badge_html += f'<span style="background:#30363D;color:#FFF;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
-            
-            badge_label = QLabel(f'<div style="margin-top:4px;">{badge_html}</div>')
-            badge_label.setTextFormat(Qt.TextFormat.RichText)
-            badge_label.setWordWrap(True)
-            layout.addWidget(badge_label)
-        
+                    badge_html += f'<span style="color:#8B949E;font-weight:700;"> [{badge}]</span>'
+            html += f'<br/>{"".join(badge_html)}'
+
         item = QListWidgetItem()
         item.setData(Qt.ItemDataRole.UserRole, fix)
-        item.setSizeHint(widget.sizeHint())
+        item.setData(Qt.ItemDataRole.DisplayRole, html)
 
-        # IMPORTANT: the item must be in the list BEFORE setItemWidget,
-        # otherwise Qt never attaches the widget and the row renders empty.
+        # Give rows room for two lines (title + badges); short titles
+        # stay single-line.
+        from PySide6.QtCore import QSize
+        item.setSizeHint(QSize(0, 48))
+
         list_widget.addItem(item)
-        list_widget.setItemWidget(item, widget)
-        
         return item
 
     def _on_selection_changed(self):
