@@ -62,89 +62,67 @@ class PluginManager:
         }
 
     @staticmethod
-    def _find_terminal() -> Optional[str]:
-        """Find a usable terminal emulator for interactive installs."""
-        import shutil as _shutil
-        for t in ("konsole", "gnome-terminal", "xfce4-terminal", "mate-terminal",
-                  "lxterminal", "qterminal", "alacritty", "foot", "kitty", "tilix",
-                  "xterm", "x-terminal-emulator"):
-            if _shutil.which(t):
-                return t
-        return None
-
-    @staticmethod
-    def _terminal_launch_cmd(term: str, inner: str) -> Optional[list]:
-        """Build the argv that opens `term` running the shell command `inner`."""
-        if term == "konsole":
-            return ["konsole", "--hold", "-e", "bash", "-c", inner]
-        if term == "gnome-terminal":
-            return ["gnome-terminal", "--", "bash", "-c", inner]
-        if term == "xfce4-terminal":
-            return ["xfce4-terminal", "-H", "-x", "bash", "-c", inner]
-        if term == "mate-terminal":
-            return ["mate-terminal", "--", "bash", "-c", inner]
-        if term in ("lxterminal", "qterminal", "tilix"):
-            return [term, "-e", "bash", "-c", inner]
-        if term in ("alacritty", "foot", "kitty"):
-            return [term, "-e", "bash", "-c", inner]
-        if term == "xterm":
-            return ["xterm", "-hold", "-e", "bash", "-c", inner]
-        if term == "x-terminal-emulator":
-            return ["x-terminal-emulator", "-e", "bash", "-c", inner]
-        return None
-
-    @classmethod
-    async def _run_setup_in_terminal(cls, workdir: Path, mode: str, marker: Path) -> bool:
-        """Open a visible terminal running `bash setup.sh <mode>` in workdir.
-        The command writes its exit code to `marker`; returns True if a terminal
-        was successfully launched (caller then polls the marker)."""
-        import shlex
-        term = cls._find_terminal()
-        if not term:
-            return False
-        marker.parent.mkdir(parents=True, exist_ok=True)
+    def _write_askpass() -> Optional[Path]:
+        """Write a GUI askpass helper that shows the themed SudoPasswordDialog.
+        Runs with the app's own interpreter so PySide6 and the app theme are
+        always available."""
+        import sys
         try:
-            marker.unlink(missing_ok=True)
-        except OSError:
-            pass
-        inner = (
-            f"cd {shlex.quote(str(workdir))} && bash setup.sh {mode}; rc=$?; "
-            f"printf '%s' \"$rc\" > {shlex.quote(str(marker))}; echo; "
-            f"echo 'slsteam-moon {mode} finished (exit code: $rc). You can close this window.'; "
-            "read -r _"
-        )
-        cmd = cls._terminal_launch_cmd(term, inner)
-        if not cmd:
-            return False
-        try:
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, start_new_session=True)
-            return True
+            SLS_DIR.mkdir(parents=True, exist_ok=True)
+            askpass = SLS_DIR / "askpass.py"
+            app_root = Path(__file__).parent.parent.parent
+            script = (
+                f"#!{sys.executable}\n"
+                "import sys\n"
+                f"sys.path.insert(0, {str(app_root)!r})\n"
+                "from PySide6.QtWidgets import QApplication, QDialog\n"
+                "from src.ui.styles import DARK_THEME\n"
+                "from src.ui.sudo_dialog import SudoPasswordDialog\n"
+                "app = QApplication(sys.argv)\n"
+                "app.setStyleSheet(DARK_THEME)\n"
+                "dlg = SudoPasswordDialog(\n"
+                "    prompt='Administrator authentication',\n"
+                "    detail='slsteam-moon needs root access to install the Steam "
+                "launcher shim. Enter your sudo password.',\n"
+                ")\n"
+                "if dlg.exec() == QDialog.DialogCode.Accepted:\n"
+                "    print(dlg.password)\n"
+                "    sys.exit(0)\n"
+                "sys.exit(1)\n"
+            )
+            askpass.write_text(script)
+            askpass.chmod(0o755)
+            return askpass
         except Exception:
-            return False
-
-    @staticmethod
-    async def _wait_for_marker(marker: Path, timeout: float = 900.0) -> Optional[int]:
-        """Poll until the marker file contains the setup.sh exit code."""
-        import time as _time
-        deadline = _time.monotonic() + timeout
-        while _time.monotonic() < deadline:
-            if marker.exists():
-                try:
-                    text = marker.read_text().strip()
-                    if text:
-                        return int(text)
-                except Exception:
-                    return None
-            await asyncio.sleep(2)
-        return None
+            return None
 
     @classmethod
-    async def _run_setup_noninteractive(cls, workdir: Path, mode: str) -> tuple[bool, str]:
-        """Fallback when no terminal emulator exists: run setup.sh in the
-        background with sudo denied (user desktop coverage only)."""
+    def _setup_env(cls) -> Dict[str, str]:
+        """Build env for setup.sh. Uses sudo without prompting when credentials
+        are already cached (sudo -n); otherwise wires a themed GUI askpass
+        helper so the user is prompted for the sudo password in-app. If no
+        askpass helper can be created, system launcher interception is skipped
+        and only user desktop coverage applies."""
         env = os.environ.copy()
-        env["SLSM_SUDO_DENIED"] = "1"
+        try:
+            primed = subprocess.run(["sudo", "-n", "true"], capture_output=True, timeout=10).returncode == 0
+        except Exception:
+            primed = False
+        if primed:
+            env["SLSM_SUDO_PRIMED"] = "1"
+        else:
+            askpass = cls._write_askpass()
+            if askpass is not None:
+                env["SUDO_ASKPASS"] = str(askpass)
+            else:
+                env["SLSM_SUDO_DENIED"] = "1"
+        return env
+
+    @classmethod
+    async def _run_setup(cls, workdir: Path, mode: str) -> tuple[bool, str]:
+        """Run `bash setup.sh <mode>` in workdir. The sudo password is asked
+        via the themed GUI dialog when credentials are not cached."""
+        env = cls._setup_env()
         try:
             proc = await asyncio.to_thread(
                 subprocess.run,
@@ -153,7 +131,7 @@ class PluginManager:
                 env=env,
                 capture_output=True,
                 text=True,
-                timeout=600,
+                timeout=900,
             )
             output = (proc.stdout or "") + (proc.stderr or "")
             return proc.returncode == 0, output
@@ -218,12 +196,9 @@ class PluginManager:
                     zip_data.seek(0)
 
                     with zipfile.ZipFile(zip_data, 'r') as zf:
-                        # Extract to a persistent temp dir: a visible terminal
-                        # may still be running setup.sh from here after this
-                        # function returns, so it must survive the async task.
+                        # Extract to a temp dir for the setup run
                         import tempfile
-                        tmpdir = tempfile.mkdtemp(prefix="slsteam-moon-install-")
-                        try:
+                        with tempfile.TemporaryDirectory() as tmpdir:
                             zf.extractall(tmpdir)
                             # Find extracted folder (slsteam-moon-<version>-lumen/)
                             extracted = None
@@ -239,30 +214,17 @@ class PluginManager:
                             if setup_script.exists():
                                 # Official installer: creates the wrapper and
                                 # patches desktop entries (the critical part a
-                                # plain file copy cannot do). Runs in a visible
-                                # terminal so the user can enter the sudo
-                                # password right there.
-                                marker = extracted / "install.exit"
-                                launched = await cls._run_setup_in_terminal(extracted, "install", marker)
-                                if launched:
-                                    log("A terminal has been opened - follow the installer and enter your sudo password there.")
-                                    log("Waiting for the installer to finish...")
-                                    rc = await cls._wait_for_marker(marker)
-                                    if rc is None:
-                                        log("✗ Timed out waiting for setup.sh (terminal may have been closed early)")
-                                        return False
-                                    if rc != 0:
-                                        log(f"✗ setup.sh exited with code {rc} - check the terminal output")
-                                        return False
-                                    log("setup.sh completed successfully")
-                                else:
-                                    log("No terminal emulator found; running setup.sh non-interactively (user desktop coverage only).")
-                                    ok, output = await cls._run_setup_noninteractive(extracted, "install")
-                                    for line in output.splitlines():
-                                        log(line)
-                                    if not ok:
-                                        log("✗ Non-interactive setup.sh failed")
-                                        return False
+                                # plain file copy cannot do). The sudo password
+                                # is requested via the themed GUI dialog.
+                                log("Running slsteam-moon setup.sh (wrapper + desktop coverage)...")
+                                if cls._write_askpass() is not None:
+                                    log("If prompted, enter your sudo password to intercept the Steam launcher.")
+                                ok, output = await cls._run_setup(extracted, "install")
+                                for line in output.splitlines():
+                                    log(line)
+                                if not ok:
+                                    log("✗ setup.sh failed - see output above")
+                                    return False
                                 # Keep setup.sh (and its tools libs) for later uninstall
                                 shutil.copy2(setup_script, SLS_DIR / "setup.sh")
                                 (SLS_DIR / "setup.sh").chmod(0o755)
@@ -303,16 +265,6 @@ class PluginManager:
 
                             log(f"✓ slsteam-moon {version} files installed to {SLS_DIR}")
                             return True
-                        finally:
-                            # Remove the extracted release only once setup.sh
-                            # finished (marker written); if the user is still
-                            # running the installer in a terminal, leave the dir
-                            # for the OS temp cleaner.
-                            try:
-                                if extracted is not None and (extracted / "install.exit").exists():
-                                    shutil.rmtree(tmpdir, ignore_errors=True)
-                            except Exception:
-                                pass
 
         except Exception as e:
             log(f"✗ slsteam-moon installation failed: {e}")
@@ -438,18 +390,11 @@ class PluginManager:
         try:
             setup_script = SLS_DIR / "setup.sh"
             if setup_script.exists():
-                marker = SLS_DIR / "uninstall.exit"
-                launched = await cls._run_setup_in_terminal(SLS_DIR, "uninstall", marker)
-                if launched:
-                    rc = await cls._wait_for_marker(marker, timeout=600)
-                    if rc is None:
-                        logger.warning("Timed out waiting for setup.sh uninstall")
-                    elif rc != 0:
-                        logger.warning(f"setup.sh uninstall exited {rc}")
-                else:
-                    ok, output = await cls._run_setup_noninteractive(SLS_DIR, "uninstall")
-                    if not ok:
-                        logger.warning(f"Non-interactive uninstall failed: {output[:500]}")
+                if cls._write_askpass() is not None:
+                    logger.info("If prompted, enter your sudo password to restore the Steam launcher.")
+                ok, output = await cls._run_setup(SLS_DIR, "uninstall")
+                if not ok:
+                    logger.warning(f"setup.sh uninstall failed: {output[:500]}")
             else:
                 for d in (SLS_DIR, FLATPAK_SLS_DIR):
                     if d.exists():
