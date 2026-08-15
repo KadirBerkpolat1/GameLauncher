@@ -25,12 +25,14 @@ class RichTextDelegate(QStyledItemDelegate):
         doc.setDocumentMargin(0)
         doc.setDefaultFont(option.font)
         doc.setHtml(html)
+        doc.setTextWidth(RichTextDelegate.TEXT_WIDTH)
         rect = option.rect.adjusted(8, 8, -8, -8)
         painter.translate(rect.left(), rect.top())
-        clip = painter.clipRegion().boundingRect()
         painter.setClipRect(rect)
         doc.drawContents(painter)
         painter.restore()
+
+    TEXT_WIDTH = 540.0
 
     def sizeHint(self, option, index):
         html = index.data(Qt.ItemDataRole.DisplayRole)
@@ -40,10 +42,10 @@ class RichTextDelegate(QStyledItemDelegate):
         doc.setDocumentMargin(0)
         doc.setDefaultFont(option.font)
         doc.setHtml(html)
-        # Approximate the list width so long titles wrap instead of eliding
-        w = max(option.rect.width() - 16, 300)
-        doc.setTextWidth(w)
-        return QSize(w + 16, int(doc.size().height()) + 16)
+        # Use the same fixed width as paint() so wrapped long titles get
+        # enough row height (option.rect/widget widths are unreliable here).
+        doc.setTextWidth(RichTextDelegate.TEXT_WIDTH)
+        return QSize(int(RichTextDelegate.TEXT_WIDTH) + 16, int(doc.size().height()) + 16)
 
 class FixPickDialog(QDialog):
     def __init__(self, fixes: list, parent=None):
