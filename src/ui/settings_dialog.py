@@ -920,15 +920,17 @@ class SettingsDialog(QDialog):
 
         async def _test():
             try:
-                url = "https://www.steamgriddb.com/api/v2/profile"
+                # SteamGridDB has no /profile endpoint; validate the key by
+                # hitting a real endpoint (200 = valid, 401 = invalid).
+                url = "https://www.steamgriddb.com/api/v2/grids/game/1"
                 headers = {"Authorization": f"Bearer {key}"}
-                async with httpx.AsyncClient(timeout=10.0) as client:
+                async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
                     resp = await client.get(url, headers=headers)
                     if resp.status_code == 200:
                         data = resp.json()
                         if data.get("success"):
-                            username = data.get("data", {}).get("username", "Unknown")
-                            QMessageBox.information(self, "Test Key", f"✅ Valid key!\nLogged in as: {username}")
+                            count = len(data.get("data", []))
+                            QMessageBox.information(self, "Test Key", f"✅ Valid key!\nConnected to SteamGridDB (sample: {count} grids).")
                         else:
                             QMessageBox.warning(self, "Test Key", f"❌ Invalid key: {data.get('errors', ['Unknown error'])}")
                     elif resp.status_code == 401:
