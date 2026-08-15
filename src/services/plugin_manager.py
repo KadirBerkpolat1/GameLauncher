@@ -40,7 +40,7 @@ class PluginManager:
         sls_installed = False
         sls_dir = ""
         for d in (SLS_DIR, FLATPAK_SLS_DIR):
-            if (d / "SLSsteam.so").exists():
+            if (d / "bin" / "SLSsteam.so").exists() or (d / "SLSsteam.so").exists():
                 sls_installed = True
                 sls_dir = str(d)
                 break
@@ -74,7 +74,7 @@ class PluginManager:
 
         try:
             log("Fetching latest slsteam-moon release...")
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
                 # Get latest release
                 resp = await client.get(f"https://api.github.com/repos/{cls.SLSTEAM_MOON_REPO}/releases/latest")
                 resp.raise_for_status()
@@ -164,7 +164,7 @@ class PluginManager:
 
         try:
             log("Fetching latest lumen release...")
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
                 resp = await client.get(f"https://api.github.com/repos/{cls.LUMEN_REPO}/releases/latest")
                 resp.raise_for_status()
                 release = resp.json()
@@ -233,7 +233,7 @@ class PluginManager:
         import shutil
         from pathlib import Path
         
-        custom_dir = Path(__file__).parent.parent.parent / "lumen_custom"
+        custom_dir = Path(__file__).parent.parent / "lumen_custom"
         if not custom_dir.exists():
             log_callback(f"  Nebula custom lua not found at {custom_dir}, skipping overlay")
             return

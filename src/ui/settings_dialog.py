@@ -701,7 +701,9 @@ class SettingsDialog(QDialog):
         # 1. Check SLSsteam status (must have actual SLSsteam.so binary, not just leftover dirs)
         sls_binary_paths = [
             Path.home() / ".local" / "share" / "SLSsteam" / "SLSsteam.so",
+            Path.home() / ".local" / "share" / "SLSsteam" / "bin" / "SLSsteam.so",
             Path.home() / ".var" / "app" / "com.valvesoftware.Steam" / ".local" / "share" / "SLSsteam" / "SLSsteam.so",
+            Path.home() / ".var" / "app" / "com.valvesoftware.Steam" / ".local" / "share" / "SLSsteam" / "bin" / "SLSsteam.so",
         ]
         if any(p.exists() for p in sls_binary_paths):
             self.lbl_sls_status.setText("●  Installed")
