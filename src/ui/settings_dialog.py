@@ -167,6 +167,10 @@ class SettingsDialog(QDialog):
         btn_row.addWidget(self.btn_test_key)
         btn_row.addWidget(self.btn_get_hubcap_key)
         btn_row.addStretch()
+
+        hubcap_layout.addWidget(self.input_hubcap_key)
+        hubcap_layout.addLayout(btn_row)
+
         layout.addWidget(group_hubcap)
 
         # Ryuu Manifest API Group
