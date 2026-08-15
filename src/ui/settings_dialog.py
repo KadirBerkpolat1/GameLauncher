@@ -698,13 +698,12 @@ class SettingsDialog(QDialog):
         self._update_tools_status()
 
     def _update_tools_status(self) -> None:
-        # 1. Check SLSsteam status
-        sls_paths = [
-            Path.home() / ".local" / "share" / "SLSsteam",
-            Path.home() / ".var" / "app" / "com.valvesoftware.Steam" / ".local" / "share" / "SLSsteam",
-            Path.home() / ".config" / "SLSsteam",
+        # 1. Check SLSsteam status (must have actual SLSsteam.so binary, not just leftover dirs)
+        sls_binary_paths = [
+            Path.home() / ".local" / "share" / "SLSsteam" / "SLSsteam.so",
+            Path.home() / ".var" / "app" / "com.valvesoftware.Steam" / ".local" / "share" / "SLSsteam" / "SLSsteam.so",
         ]
-        if any(p.exists() for p in sls_paths):
+        if any(p.exists() for p in sls_binary_paths):
             self.lbl_sls_status.setText("●  Installed")
             self.lbl_sls_status.setStyleSheet("color: #34D399; font-size: 11px; font-weight: 700;")
         else:
