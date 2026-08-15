@@ -1,4 +1,5 @@
 import logging
+import re
 import vdf
 from pathlib import Path
 from typing import Dict, Any
@@ -169,6 +170,45 @@ class LocalConfigManager:
         return updated
 
     def update_launch_options(self, app_id: str):
-        """Legacy method - adds WINEDLLOVERRIDES for fix compatibility."""
-        launch_opts = 'WINEDLLOVERRIDES="custom=n;onlinefix64=n;steam_api64=n;winmm=n,b" %command%'
+        """Merge fix DLL overrides into existing launch options.
+
+        Preserves any user-added options and only adds/updates the
+        WINEDLLOVERRIDES block needed for OnlineFix + Steamless/SteamStubs.
+        """
+        existing = self.get_launch_options(app_id)
+
+        # Required DLL overrides: OnlineFix + Steamless/SteamStubs + common mod DLLs
+        required = {
+            "custom": "n",
+            "onlinefix64": "n",
+            "steam_api": "n",
+            "steam_api64": "n",
+            "tier0_s": "n",
+            "vstdlib_s": "n",
+            "winmm": "n,b",
+        }
+
+        # Parse existing WINEDLLOVERRIDES="..." if present
+        existing_overrides = {}
+        wo_match = re.search(r'WINEDLLOVERRIDES="([^"]*)"', existing)
+        if wo_match:
+            for pair in wo_match.group(1).split(";"):
+                pair = pair.strip()
+                if "=" in pair:
+                    k, v = pair.split("=", 1)
+                    existing_overrides[k.strip()] = v.strip()
+
+        # Merge: keep existing overrides, add/update required ones
+        merged = {**existing_overrides, **required}
+        merged_str = ";".join(f"{k}={v}" for k, v in merged.items())
+
+        # Strip old WINEDLLOVERRIDES block from existing options
+        cleaned = re.sub(r'WINEDLLOVERRIDES="[^"]*"\s*', '', existing).strip()
+
+        # Build final options: merged overrides + whatever user had (e.g. %command%)
+        parts = [f'WINEDLLOVERRIDES="{merged_str}"']
+        if cleaned:
+            parts.append(cleaned)
+        launch_opts = " ".join(parts)
+
         self.set_launch_options(app_id, launch_opts)
