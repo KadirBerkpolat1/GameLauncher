@@ -58,6 +58,13 @@ class CloudRedirectManager:
         return CR_SO_PATH.exists() and CR_SO_PATH.stat().st_size > 0
 
     @classmethod
+    async def ensure_installed(cls, progress_callback: Optional[callable] = None) -> bool:
+        """Ensures CloudRedirect binary is installed. Installs if missing."""
+        if cls.is_installed():
+            return True
+        return await cls.install_binary(progress_callback)
+
+    @classmethod
     async def install_binary(cls, progress_callback: Optional[callable] = None) -> bool:
         """Downloads the latest cloud_redirect.so from GitHub releases."""
         def log(msg: str):
@@ -65,8 +72,8 @@ class CloudRedirectManager:
             if progress_callback:
                 progress_callback(msg)
 
-        log("Fetching latest CloudRedirect release...")
         try:
+            log("Fetching latest CloudRedirect release...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 # Get latest release
                 resp = await client.get(CR_RELEASE_URL)
@@ -116,7 +123,6 @@ class CloudRedirectManager:
         except Exception as e:
             log(f"Failed to install CloudRedirect: {e}")
             return False
-
     @staticmethod
     def get_config() -> Dict[str, Any]:
         """Reads CloudRedirect configuration."""

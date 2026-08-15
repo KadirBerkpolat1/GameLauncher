@@ -387,6 +387,15 @@ class SettingsDialog(QDialog):
 
     async def _async_fetch_account_stats(self) -> None:
         try:
+            # Only fetch if Hubcap key is configured
+            key = SettingsManager.get("hubcap_api_key", "").strip()
+            if not key:
+                self.lbl_user_name.setText("<b>Account:</b> No API key configured")
+                self.lbl_user_quota.setText("<b>Daily Quota:</b> N/A")
+                self.lbl_user_expires.setText("<b>Key Expires:</b> N/A")
+                self.quota_bar.setValue(0)
+                return
+            
             stats = await hubcap_api.get_user_stats()
             username = stats.get("username", "Unknown")
             used = stats.get("daily_usage", 0)
@@ -396,17 +405,19 @@ class SettingsDialog(QDialog):
                 expires = expires.split("T")[0]
             else:
                 expires = "Never"
-
+            
             self.lbl_user_name.setText(f"<b>Username:</b> <span style='color: #818CF8;'>{username}</span>")
             self.lbl_user_quota.setText(f"<b>Daily Quota:</b> <span style='color: #34D399;'>{used} / {limit} Used</span>")
             self.lbl_user_expires.setText(f"<b>Key Expires:</b> <span style='color: #94A3B8;'>{expires}</span>")
-
+            
             if limit > 0:
                 pct = int((used / limit) * 100)
                 self.quota_bar.setValue(pct)
         except Exception as e:
             self.lbl_user_name.setText(f"<b>Account:</b> Error ({e})")
-    # =========================================================================
+            self.lbl_user_quota.setText("<b>Daily Quota:</b> Error")
+            self.lbl_user_expires.setText("<b>Key Expires:</b> Error")
+            self.quota_bar.setValue(0)
     def _setup_steam_page(self) -> None:
         layout = QVBoxLayout(self.page_steam)
         layout.setContentsMargins(0, 0, 0, 0)

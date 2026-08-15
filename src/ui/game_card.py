@@ -508,14 +508,8 @@ class GameCard(QFrame):
         try:
             self.btn_apply_fix.setText("Searching...")
             fixes = await UnifiedFixFetcher.get_available_fixes(self.title)
-
-            # Add Goldberg as an explicit offline choice
-            fixes.append({
-                "source": "goldberg",
-                "title": "Remove Steam DRM (Singleplayer / Offline Only)",
-                "version": "Auto",
-                "url": ""
-            })
+            
+            # UnifiedFixFetcher already adds Goldberg, no need to add again
 
             from src.ui.fix_pick_dialog import FixPickDialog
             dlg = FixPickDialog(fixes, self)

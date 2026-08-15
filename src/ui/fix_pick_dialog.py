@@ -79,11 +79,9 @@ class FixPickDialog(QDialog):
             
             list_widget = QListWidget()
             list_widget.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-            
             for fix in source_fixes:
-                item = self._create_fix_item(fix, source, info)
+                item = self._create_fix_item(fix, source, info, list_widget)
                 list_widget.addItem(item)
-            
             self.all_list_widgets.append((list_widget, source))
             tab_layout.addWidget(list_widget)
             
@@ -116,39 +114,55 @@ class FixPickDialog(QDialog):
             first_list = self.all_list_widgets[0][0]
             if first_list.count() > 0:
                 first_list.setCurrentRow(0)
-
-    def _create_fix_item(self, fix: dict, source: str, info: dict) -> QListWidgetItem:
-        """Create a list item with fix details and badges."""
+    def _create_fix_item(self, fix: dict, source: str, info: dict, list_widget) -> QListWidgetItem:
+        """Create a list item with fix details and badges using rich text widget."""
         title = fix.get("title", "Unknown Fix")
         version = fix.get("version", "1.0.0")
         badges = fix.get("badges", [])
-        url = fix.get("url", "")
         
-        # Build display text
-        badge_html = ""
-        for badge in badges:
-            badge_lower = badge.lower()
-            if "online" in badge_lower:
-                badge_html += f'<span style="background:#3FB950;color:#000;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
-            elif "bypass" in badge_lower:
-                badge_html += f'<span style="background:#D29922;color:#000;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
-            elif "crack" in badge_lower:
-                badge_html += f'<span style="background:#F85149;color:#FFF;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
-            elif "dlc" in badge_lower:
-                badge_html += f'<span style="background:#58A6FF;color:#FFF;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
-            else:
-                badge_html += f'<span style="background:#30363D;color:#FFF;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+        # Create a widget for rich text display
+        from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
+        from PySide6.QtCore import Qt
         
-        display_text = (
-            f'<b style="color:#E6EDF3;">{title}</b>'
-            f'<span style="color:#8B949E;margin-left:8px;">v{version}</span>'
-            f'<div style="margin-top:4px;">{badge_html}</div>'
-        )
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(4)
+        
+        # Title and version
+        title_label = QLabel(f'<b style="color:#E6EDF3;">{title}</b> <span style="color:#8B949E;">v{version}</span>')
+        title_label.setTextFormat(Qt.TextFormat.RichText)
+        title_label.setWordWrap(True)
+        layout.addWidget(title_label)
+        
+        # Badges
+        if badges:
+            badge_html = ""
+            for badge in badges:
+                badge_lower = badge.lower()
+                if "online" in badge_lower:
+                    badge_html += f'<span style="background:#3FB950;color:#000;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+                elif "bypass" in badge_lower:
+                    badge_html += f'<span style="background:#D29922;color:#000;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+                elif "crack" in badge_lower:
+                    badge_html += f'<span style="background:#F85149;color:#FFF;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+                elif "dlc" in badge_lower:
+                    badge_html += f'<span style="background:#58A6FF;color:#FFF;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+                else:
+                    badge_html += f'<span style="background:#30363D;color:#FFF;padding:2px 6px;border-radius:3px;font-size:9px;margin-right:4px;">{badge}</span>'
+            
+            badge_label = QLabel(f'<div style="margin-top:4px;">{badge_html}</div>')
+            badge_label.setTextFormat(Qt.TextFormat.RichText)
+            badge_label.setWordWrap(True)
+            layout.addWidget(badge_label)
         
         item = QListWidgetItem()
         item.setData(Qt.ItemDataRole.UserRole, fix)
-        item.setText(display_text)
-        item.setTextAlignment(Qt.AlignmentFlag.AlignLeft)
+        item.setSizeHint(widget.sizeHint())
+        
+        # Set the widget on the item
+        list_widget.setItemWidget(item, widget)
+        
         return item
 
     def _on_selection_changed(self):
