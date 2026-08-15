@@ -1,51 +1,6 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QListWidget, QListWidgetItem,
-                                 QPushButton, QHBoxLayout, QTabWidget, QWidget, QScrollArea,
-                                 QStyledItemDelegate, QStyle)
+                                 QPushButton, QHBoxLayout, QTabWidget, QWidget, QScrollArea)
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QTextDocument
-
-class RichTextDelegate(QStyledItemDelegate):
-    """Renders item DisplayRole as rich text (QListWidget's default
-    delegate draws HTML literally)."""
-
-    def paint(self, painter, option, index):
-        html = index.data(Qt.ItemDataRole.DisplayRole)
-        if not html:
-            super().paint(painter, option, index)
-            return
-
-        painter.save()
-
-        # Selection / hover background from the style
-        style = option.widget.style() if option.widget else QApplication.style()
-        opt = option.__class__(option)
-        style.drawPrimitive(QStyle.PrimitiveElement.PE_PanelItemViewItem, opt, painter, option.widget)
-
-        doc = QTextDocument()
-        doc.setDocumentMargin(0)
-        doc.setDefaultFont(option.font)
-        doc.setHtml(html)
-        doc.setTextWidth(RichTextDelegate.TEXT_WIDTH)
-        rect = option.rect.adjusted(8, 8, -8, -8)
-        painter.translate(rect.left(), rect.top())
-        painter.setClipRect(rect)
-        doc.drawContents(painter)
-        painter.restore()
-
-    TEXT_WIDTH = 540.0
-
-    def sizeHint(self, option, index):
-        html = index.data(Qt.ItemDataRole.DisplayRole)
-        if not html:
-            return super().sizeHint(option, index)
-        doc = QTextDocument()
-        doc.setDocumentMargin(0)
-        doc.setDefaultFont(option.font)
-        doc.setHtml(html)
-        # Use the same fixed width as paint() so wrapped long titles get
-        # enough row height (option.rect/widget widths are unreliable here).
-        doc.setTextWidth(RichTextDelegate.TEXT_WIDTH)
-        return QSize(int(RichTextDelegate.TEXT_WIDTH) + 16, int(doc.size().height()) + 16)
 
 class FixPickDialog(QDialog):
     def __init__(self, fixes: list, parent=None):
@@ -130,9 +85,8 @@ class FixPickDialog(QDialog):
             
             list_widget = QListWidget()
             list_widget.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-            list_widget.setItemDelegate(RichTextDelegate(list_widget))
             for fix in source_fixes:
-                item = self._create_fix_item(fix, source, info, list_widget)
+                item = self._create_fix_item(fix, source, info)
                 list_widget.addItem(item)
             self.all_list_widgets.append((list_widget, source))
             tab_layout.addWidget(list_widget)
@@ -157,10 +111,8 @@ class FixPickDialog(QDialog):
             
             list_widget = QListWidget()
             list_widget.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-            list_widget.setItemDelegate(RichTextDelegate(list_widget))
             for fix in goldberg_fixes:
-                # Use fallback info for display
-                item = self._create_fix_item(fix, "goldberg", fallback_info, list_widget)
+                item = self._create_fix_item(fix, "goldberg", fallback_info)
                 list_widget.addItem(item)
             self.all_list_widgets.append((list_widget, "goldberg"))
             tab_layout.addWidget(list_widget)
@@ -188,36 +140,18 @@ class FixPickDialog(QDialog):
         for list_widget, _ in self.all_list_widgets:
             list_widget.itemSelectionChanged.connect(self._on_selection_changed)
 
-    def _create_fix_item(self, fix: dict, source: str, info: dict, list_widget) -> QListWidgetItem:
-        """Create a list item with fix details and badges using rich text."""
+    def _create_fix_item(self, fix: dict, source: str, info: dict) -> QListWidgetItem:
+        """Create a plain-text list item with fix details and badges."""
         title = fix.get("title", "Unknown Fix")
         version = fix.get("version", "1.0.0")
         badges = fix.get("badges", [])
 
-        # Use the list's native rich-text rendering instead of setItemWidget:
-        # item widgets fail to attach (empty rows) or get wrong sizes
-        # (clipped/invisible text) across Qt versions and screen scales.
-        html = f'<b style="color:#E6EDF3;">{title}</b> <span style="color:#8B949E;">{version}</span>'
-        if badges:
-            badge_html = ""
-            for badge in badges:
-                badge_lower = badge.lower()
-                if "online" in badge_lower:
-                    badge_html += f'<span style="color:#3FB950;font-weight:700;"> [{badge}]</span>'
-                elif "bypass" in badge_lower:
-                    badge_html += f'<span style="color:#D29922;font-weight:700;"> [{badge}]</span>'
-                elif "crack" in badge_lower:
-                    badge_html += f'<span style="color:#F85149;font-weight:700;"> [{badge}]</span>'
-                elif "dlc" in badge_lower:
-                    badge_html += f'<span style="color:#58A6FF;font-weight:700;"> [{badge}]</span>'
-                else:
-                    badge_html += f'<span style="color:#8B949E;font-weight:700;"> [{badge}]</span>'
-            html += f'<br/>{"".join(badge_html)}'
+        badge_str = " ".join([f"[{b}]" for b in badges]) if badges else ""
+        text = f"{title}  {version}  {badge_str}".strip()
 
-        item = QListWidgetItem()
+        item = QListWidgetItem(text)
         item.setData(Qt.ItemDataRole.UserRole, fix)
-        item.setData(Qt.ItemDataRole.DisplayRole, html)
-        list_widget.addItem(item)
+        item.setSizeHint(QSize(0, 50))
         return item
 
     def _on_selection_changed(self):
