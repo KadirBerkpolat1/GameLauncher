@@ -34,10 +34,9 @@ class PluginManager:
     # GitHub release URLs
     SLSTEAM_MOON_REPO = "swwayps/slsteam-moon"
     LUMEN_REPO = "swwayps/lumen"
-
     @staticmethod
     def get_status() -> Dict[str, Any]:
-        """Returns the installation status of slsteam-moon and lumen."""
+        """Returns the installation status of slsteam-moon, lumen, and luatools."""
         sls_installed = False
         sls_dir = ""
         for d in (SLS_DIR, FLATPAK_SLS_DIR):
@@ -47,12 +46,17 @@ class PluginManager:
                 break
 
         lumen_installed = (LUMEN_DIR / "lumen").exists() or (PLUGINS_DIR / "lumen").exists()
+        
+        # Check for LuaTools plugin (we don't install it, but detect if present)
+        luatools_installed = (LUMEN_DIR / "lua" / "luatools").exists()
 
         return {
             "slsteam_moon": sls_installed,
             "slsteam_moon_dir": sls_dir,
             "lumen": lumen_installed,
             "lumen_dir": str(LUMEN_DIR) if (LUMEN_DIR / "lumen").exists() else str(PLUGINS_DIR),
+            "luatools": luatools_installed,
+            "luatools_dir": str(LUMEN_DIR / "lua" / "luatools") if luatools_installed else "",
         }
 
     @classmethod
@@ -61,6 +65,7 @@ class PluginManager:
         Downloads and installs slsteam-moon release.
         This REPLACES any existing Headcrab/SLSsteam installation.
         Includes: SLSsteam.so, library-inject.so, Lumen lua scripts, Steamless, SteamStub bypass, config.yaml
+        Does NOT install LuaTools plugin - we use Lumen with our custom lua overlay instead.
         """
         def log(msg: str):
             logger.info(msg)

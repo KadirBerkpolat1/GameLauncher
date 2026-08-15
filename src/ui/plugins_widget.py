@@ -120,8 +120,12 @@ class PluginsWidget(QWidget):
         lumen_btn_box.addStretch()
         lumen_layout.addLayout(lumen_btn_box)
 
-        scroll_layout.addWidget(self.lumen_card)
+        # LuaTools status (detect only - we don't install it)
+        self.lbl_luatools_status = QLabel("Checking LuaTools status...")
+        self.lbl_luatools_status.setStyleSheet("color: #818CF8; font-weight: 700; font-size: 13px;")
+        lumen_layout.addWidget(self.lbl_luatools_status)
 
+        scroll_layout.addWidget(self.lumen_card)
         # =====================================================================
         # 3. CLOUDREDIRECT CARD
         # =====================================================================
@@ -323,6 +327,14 @@ class PluginsWidget(QWidget):
         else:
             self.lbl_lumen_status.setText("○  lumen: Not Installed (Optional)")
             self.lbl_lumen_status.setStyleSheet("color: #64748B; font-weight: 700; font-size: 13px;")
+
+        # LuaTools (detect only - we don't install it, we use custom Lumen lua)
+        if status.get("luatools", False):
+            self.lbl_luatools_status.setText(f"●  LuaTools: Installed ({status['luatools_dir']})")
+            self.lbl_luatools_status.setStyleSheet("color: #10B981; font-weight: 700; font-size: 13px;")
+        else:
+            self.lbl_luatools_status.setText("○  LuaTools: Not Installed (Using Nebula Lumen customization instead)")
+            self.lbl_luatools_status.setStyleSheet("color: #64748B; font-weight: 700; font-size: 13px;")
 
         # CloudRedirect
         cr_installed = CloudRedirectManager.is_installed()
