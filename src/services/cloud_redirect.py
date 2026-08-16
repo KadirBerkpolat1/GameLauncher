@@ -318,8 +318,17 @@ class CloudRedirectManager:
             current_opts = manager.get_launch_options(app_id_str) or ""
 
             # Build LD_PRELOAD
-            preload = f"LD_PRELOAD={CR_SO_PATH} %command%"
-            if preload in current_opts:
+            steam_path = get_steam_path()
+            preload_libs = [str(CR_SO_PATH)]
+            
+            if steam_path:
+                sc_path = steam_path / "linux64" / "steamclient.so"
+                if sc_path.exists():
+                    preload_libs.insert(0, str(sc_path))
+            
+            preload_str = ":".join(preload_libs)
+            preload = f"LD_PRELOAD={preload_str} %command%"
+            if str(CR_SO_PATH) in current_opts:
                 return True  # Already applied
 
             new_opts = f"{preload} {current_opts}".strip()
@@ -337,15 +346,24 @@ class CloudRedirectManager:
             app_id_str = str(app_id)
 
             current_opts = manager.get_launch_options(app_id_str) or ""
-            preload = f"LD_PRELOAD={CR_SO_PATH}"
-
-            if preload not in current_opts:
-                return True  # Not applied
-
-            # Remove the LD_PRELOAD part
-            new_opts = current_opts.replace(preload, "").replace("%command%", "").strip()
+            
+            import re
+            # Remove LD_PRELOAD block that contains CR_SO_PATH and %command%
+            # Pattern matches LD_PRELOAD=path1:path2 %command%
+            pattern = rf"LD_PRELOAD=[^\s]*{re.escape(str(CR_SO_PATH))}[^\s]*\s+%command%"
+            
+            if not re.search(pattern, current_opts):
+                # Try legacy pattern
+                legacy_pattern = rf"LD_PRELOAD={re.escape(str(CR_SO_PATH))}\s+%command%"
+                if not re.search(legacy_pattern, current_opts):
+                    return True  # Not applied
+            
+            new_opts = re.sub(pattern, "", current_opts)
+            new_opts = re.sub(legacy_pattern, "", new_opts) if 'legacy_pattern' in locals() else new_opts
+            
             # Clean up double spaces
-            new_opts = " ".join(new_opts.split())
+            import re as re_mod
+            new_opts = re_mod.sub(r"\s+", " ", new_opts).strip()
 
             return manager.set_launch_options(app_id_str, new_opts)
 
